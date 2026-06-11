@@ -33,6 +33,7 @@ type ImmediateLabel = {
   medicalNotes: string | null;
   specialInstructions: string | null;
   visitNumber: number | null;
+  authorizedPickups: string | null;
 };
 
 function serializeAllergies(allergies: string[], allergyOther: string): string | null {
@@ -131,6 +132,7 @@ export async function POST(
     familyId,
     isNewFamily,
     children,
+    authorizedPickups,
   } = body as {
     parentName: string;
     parentPhone: string;
@@ -138,6 +140,7 @@ export async function POST(
     familyId?: string;
     isNewFamily?: boolean;
     children: ChildInput[];
+    authorizedPickups?: string;
   };
 
   if (!parentName || !parentPhone || !children?.length) {
@@ -214,6 +217,7 @@ export async function POST(
           parent1_last_name: lastName,
           parent1_phone: normalizedPhone,
           parent1_email: normalizedEmail,
+          authorized_pickups: authorizedPickups ?? null,
           visit_date: today,
           status: 'new',
           follow_up_sent: false,
@@ -225,18 +229,15 @@ export async function POST(
       if (familyError) console.error('[check-in] family insert error:', familyError.message);
       resolvedFamilyId = created?.id ?? null;
     }
-  } else if (normalizedEmail) {
-    const { data: currentFamily } = await admin
-      .from('cm_visitor_families')
-      .select('parent1_email')
-      .eq('id', resolvedFamilyId)
-      .maybeSingle();
-
-    if (currentFamily && currentFamily.parent1_email !== normalizedEmail) {
+  } else {
+    const updates: Record<string, unknown> = {};
+    if (normalizedEmail) updates.parent1_email = normalizedEmail;
+    if (authorizedPickups) updates.authorized_pickups = authorizedPickups;
+    if (Object.keys(updates).length > 0) {
       await admin
         .from('cm_visitor_families')
-        .update({ parent1_email: normalizedEmail })
-        .eq('id', resolvedFamilyId);
+        .update(updates)
+        .eq('id', resolvedFamilyId!);
     }
   }
 
@@ -312,6 +313,8 @@ export async function POST(
     allergies: child.allergies ?? [],
     allergy_other: child.allergyOther ?? null,
     date_of_birth: child.childDateOfBirth ?? null,
+    special_instructions: child.specialInstructions ?? null,
+    authorized_pickups: authorizedPickups ?? null,
   }));
 
   const { data: records, error } = await admin
@@ -339,6 +342,7 @@ export async function POST(
       medicalNotes: child?.medicalNotes || null,
       specialInstructions: child?.specialInstructions || null,
       visitNumber: null,
+      authorizedPickups: null,
     };
   });
 
@@ -359,6 +363,7 @@ export async function POST(
         medicalNotes: null,
         specialInstructions: null,
         visitNumber: null,
+        authorizedPickups: authorizedPickups ?? null,
       }
     : null;
 
@@ -410,6 +415,7 @@ export async function POST(
           allergies: null,
           medical_notes: null,
           special_instructions: null,
+          authorized_pickups: authorizedPickups ?? null,
           label_type: 'parent',
           status: 'pending',
         }

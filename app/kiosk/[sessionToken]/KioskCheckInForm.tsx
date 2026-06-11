@@ -20,7 +20,7 @@ const ALLERGY_OPTIONS = [
   "Other",
 ] as const;
 
-type Room = { id: string; name: string };
+type Room = { id: string; name: string; min_age: number | null; max_age: number | null };
 
 type LookupFamily = {
   id: string;
@@ -28,6 +28,7 @@ type LookupFamily = {
   parentLastName: string;
   parentPhone: string;
   parentEmail: string | null;
+  authorizedPickups: string | null;
 };
 
 type LookupChild = {
@@ -85,6 +86,7 @@ type ImmediateLabel = {
   medicalNotes: string | null;
   specialInstructions: string | null;
   visitNumber: number | null;
+  authorizedPickups: string | null;
 };
 
 function fmtDate(d: string) {
@@ -130,6 +132,36 @@ function emptyNewChild(): NewChildForm {
 }
 
 const today = new Date().toISOString().slice(0, 10);
+
+function ageFromDob(dob: string): number | null {
+  try {
+    const [y, m, d] = dob.split("-").map(Number);
+    const now = new Date();
+    let age = now.getFullYear() - y;
+    if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) age--;
+    return age >= 0 ? age : null;
+  } catch {
+    return null;
+  }
+}
+
+function autoAssignRoom(dob: string, rooms: Room[]): string {
+  const age = ageFromDob(dob);
+  if (age === null) return "";
+  const candidates = rooms.filter((r) => {
+    const minOk = r.min_age === null || age >= r.min_age;
+    const maxOk = r.max_age === null || age <= r.max_age;
+    return minOk && maxOk;
+  });
+  if (!candidates.length) return "";
+  candidates.sort((a, b) => {
+    const rangeA = (a.max_age ?? 999) - (a.min_age ?? 0);
+    const rangeB = (b.max_age ?? 999) - (b.min_age ?? 0);
+    if (rangeA !== rangeB) return rangeA - rangeB;
+    return a.name.localeCompare(b.name);
+  });
+  return candidates[0].id;
+}
 
 function RoomSelect({
   value,
@@ -311,6 +343,12 @@ function ImmediateParentLabel({ label }: { label: ImmediateLabel }) {
         {label.parentName}
       </div>
 
+      {label.authorizedPickups && (
+        <div style={{ fontSize: 10, color: "#111", marginTop: 3 }}>
+          <strong>Auth. Pickups:</strong> {label.authorizedPickups}
+        </div>
+      )}
+
       <div style={{ fontSize: 12, color: "#333", marginTop: 3, lineHeight: 1.25 }}>
         {label.childName}
       </div>
@@ -385,6 +423,11 @@ function LabelPreviewCard({ label }: { label: ImmediateLabel }) {
           ⚠ {label.allergies}
         </div>
       )}
+      {label.authorizedPickups && label.labelType === "parent" && (
+        <div style={{ marginTop: 5, fontSize: 12, color: "#374151" }}>
+          <strong>Auth. Pickups:</strong> {label.authorizedPickups}
+        </div>
+      )}
     </div>
   );
 }
@@ -418,6 +461,9 @@ export default function KioskCheckInForm({
 
   // Shared email state (prefilled from lookup for returning, entered fresh for new)
   const [parentEmail, setParentEmail] = useState("");
+
+  // Shared authorized pickups at family level
+  const [authorizedPickups, setAuthorizedPickups] = useState("");
 
   // Returning family state
   const [family, setFamily] = useState<LookupFamily | null>(null);
@@ -464,16 +510,18 @@ export default function KioskCheckInForm({
     if (data.found) {
       setFamily(data.family);
       setParentEmail(data.family.parentEmail ?? "");
+      setAuthorizedPickups(data.family.authorizedPickups ?? "");
       setExistingChildren(
         (data.children as LookupChild[]).map((c) => {
           const { allergies, allergyOther } = parseAllergyState(c.allergies);
+          const dob = c.dateOfBirth ?? "";
           return {
             id: c.id,
             name: c.name,
             source: c.source,
             selected: true,
-            roomId: "",
-            dateOfBirth: c.dateOfBirth ?? "",
+            roomId: dob ? autoAssignRoom(dob, rooms) : "",
+            dateOfBirth: dob,
             allergies,
             allergyOther,
             medicalNotes: c.medicalNotes ?? "",
@@ -486,6 +534,7 @@ export default function KioskCheckInForm({
     } else {
       setParentName("");
       setParentEmail("");
+      setAuthorizedPickups("");
       setNewFamilyChildren([emptyNewChild()]);
       setStep("new");
     }
@@ -539,6 +588,7 @@ export default function KioskCheckInForm({
         parentEmail: parentEmail.trim() || undefined,
         familyId: family.id,
         isNewFamily: false,
+        authorizedPickups: authorizedPickups.trim() || undefined,
         children,
       }),
     });
@@ -592,6 +642,7 @@ export default function KioskCheckInForm({
         parentPhone: phone.replace(/\D/g, ""),
         parentEmail: parentEmail.trim() || undefined,
         isNewFamily: true,
+        authorizedPickups: authorizedPickups.trim() || undefined,
         children,
       }),
     });
@@ -614,6 +665,7 @@ export default function KioskCheckInForm({
     setPhone("");
     setLookupError("");
     setParentEmail("");
+    setAuthorizedPickups("");
     setFamily(null);
     setExistingChildren([]);
     setAddedChildren([]);
@@ -778,6 +830,12 @@ if (step === "success") {
                 {label.specialInstructions && (
                   <div className="mt-2">
                     Notes: {label.specialInstructions}
+                  </div>
+                )}
+
+                {label.authorizedPickups && label.labelType === "parent" && (
+                  <div className="mt-2">
+                    Auth. Pickups: {label.authorizedPickups}
                   </div>
                 )}
               </div>
@@ -946,7 +1004,7 @@ if (step === "success") {
             {family.parentFirstName} {family.parentLastName}
           </h2>
 
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 14 }}>
             <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
               Parent Email for Follow-Up
             </label>
@@ -957,6 +1015,22 @@ if (step === "success") {
               placeholder="jane@example.com (optional)"
               style={{ width: "100%", fontSize: 18, padding: "13px 16px", borderRadius: 14, border: "2px solid #e5e7eb", boxSizing: "border-box", outline: "none" }}
             />
+          </div>
+
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
+              Authorized Pickups (optional)
+            </label>
+            <input
+              type="text"
+              value={authorizedPickups}
+              onChange={(e) => setAuthorizedPickups(e.target.value)}
+              placeholder="e.g. John Smith, Mary Jones"
+              style={{ width: "100%", fontSize: 18, padding: "13px 16px", borderRadius: 14, border: "2px solid #e5e7eb", boxSizing: "border-box", outline: "none" }}
+            />
+            <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4, marginBottom: 0 }}>
+              Anyone authorized to pick up all children in your family today
+            </p>
           </div>
 
           {existingChildren.length > 0 && (
@@ -989,7 +1063,11 @@ if (step === "success") {
                     value={child.dateOfBirth}
                     max={today}
                     min="2000-01-01"
-                    onChange={(e) => setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, dateOfBirth: e.target.value } : c))}
+                    onChange={(e) => {
+                      const dob = e.target.value;
+                      const autoRoom = dob ? autoAssignRoom(dob, rooms) : "";
+                      setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, dateOfBirth: dob, roomId: autoRoom || c.roomId } : c));
+                    }}
                     style={{ width: "100%", fontSize: 16, padding: "10px 14px", borderRadius: 12, border: "2px solid #e5e7eb", boxSizing: "border-box", outline: "none" }}
                   />
                 </div>
@@ -1152,7 +1230,7 @@ if (step === "success") {
             />
           </div>
 
-          <div style={{ marginBottom: 28 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               style={{
                 display: "block",
@@ -1180,6 +1258,38 @@ if (step === "success") {
                 outline: "none",
               }}
             />
+          </div>
+
+          <div style={{ marginBottom: 28 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 15,
+                fontWeight: 700,
+                color: "#374151",
+                marginBottom: 8,
+              }}
+            >
+              Authorized Pickups (optional)
+            </label>
+            <input
+              type="text"
+              value={authorizedPickups}
+              onChange={(e) => setAuthorizedPickups(e.target.value)}
+              placeholder="e.g. John Smith, Mary Jones"
+              style={{
+                width: "100%",
+                fontSize: 18,
+                padding: "14px 18px",
+                borderRadius: 16,
+                border: "2px solid #e5e7eb",
+                boxSizing: "border-box",
+                outline: "none",
+              }}
+            />
+            <p style={{ fontSize: 12, color: "#6b7280", marginTop: 4, marginBottom: 0 }}>
+              Anyone authorized to pick up all children in your family today
+            </p>
           </div>
 
           <h3
@@ -1728,7 +1838,11 @@ function NewChildCard({
             value={child.dateOfBirth}
             max={today}
             min="2000-01-01"
-            onChange={(e) => onChange({ ...child, dateOfBirth: e.target.value })}
+            onChange={(e) => {
+              const dob = e.target.value;
+              const autoRoom = dob ? autoAssignRoom(dob, rooms) : "";
+              onChange({ ...child, dateOfBirth: dob, roomId: autoRoom || child.roomId });
+            }}
             style={{
               width: "100%",
               fontSize: 16,

@@ -29,7 +29,7 @@ export async function POST(
   // Search visitor families by parent1_phone or parent2_phone
   const { data: families } = await admin
     .from('cm_visitor_families')
-    .select('id, parent1_first_name, parent1_last_name, parent1_phone, parent1_email, parent2_first_name, parent2_last_name, parent2_phone, parent2_email')
+    .select('id, parent1_first_name, parent1_last_name, parent1_phone, parent1_email, parent2_first_name, parent2_last_name, parent2_phone, parent2_email, authorized_pickups')
     .eq('church_id', session.church_id)
     .or(`parent1_phone.eq.${phone},parent2_phone.eq.${phone}`)
     .limit(1);
@@ -77,6 +77,7 @@ export async function POST(
       parentLastName,
       parentPhone: phone,
       parentEmail,
+      authorizedPickups: (family as { authorized_pickups?: string | null }).authorized_pickups ?? null,
     },
     children,
   });

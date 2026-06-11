@@ -38,7 +38,7 @@ export default async function KioskPage({ params }: Props) {
   const [{ data: rooms }, { data: church }] = await Promise.all([
     admin
       .from("cm_checkin_rooms")
-      .select("id, name")
+      .select("id, name, min_age, max_age")
       .eq("church_id", session.church_id)
       .eq("is_active", true)
       .order("name"),
