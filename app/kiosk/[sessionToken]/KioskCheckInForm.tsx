@@ -61,9 +61,10 @@ type NewChildForm = {
   lastName: string;
   dateOfBirth: string;
   roomId: string;
+  selected: boolean;
 } & AllergyState;
 
-type Step = "phone" | "returning" | "new" | "success";
+type Step = "phone" | "returning-edit" | "new" | "attendance" | "success";
 
 type Props = {
   sessionToken: string;
@@ -120,6 +121,7 @@ function emptyNewChild(): NewChildForm {
     lastName: "",
     dateOfBirth: "",
     roomId: "",
+    selected: true,
     allergies: [],
     allergyOther: "",
     medicalNotes: "",
@@ -480,7 +482,7 @@ export default function KioskCheckInForm({
         }),
       );
       setAddedChildren([]);
-      setStep("returning");
+      setStep("attendance");
     } else {
       setParentName("");
       setParentEmail("");
@@ -495,7 +497,7 @@ export default function KioskCheckInForm({
     if (!family) return;
     const selected = existingChildren.filter((c) => c.selected);
     const additions = addedChildren.filter(
-      (c) => c.firstName.trim() && c.lastName.trim(),
+      (c) => c.firstName.trim() && c.lastName.trim() && c.selected,
     );
     if (selected.length + additions.length === 0) return;
 
@@ -558,7 +560,7 @@ export default function KioskCheckInForm({
 
   async function handleNewFamilySubmit() {
     const validChildren = newFamilyChildren.filter(
-      (c) => c.firstName.trim() && c.lastName.trim(),
+      (c) => c.firstName.trim() && c.lastName.trim() && c.selected,
     );
     if (
       !parentName.trim() ||
@@ -916,13 +918,9 @@ if (step === "success") {
     );
   }
 
-  // ── RETURNING ────────────────────────────────────────────────────────────
+  // ── RETURNING EDIT (info / add children) ────────────────────────────────
 
-  if (step === "returning" && family) {
-    const anyReady =
-      existingChildren.some((c) => c.selected) ||
-      addedChildren.some((c) => c.firstName.trim() && c.lastName.trim());
-
+  if (step === "returning-edit" && family) {
     return (
       <div
         style={{
@@ -932,7 +930,7 @@ if (step === "success") {
           flexDirection: "column",
         }}
       >
-        <Header title="Welcome Back!" />
+        <Header title="Edit Family Info" />
         <div
           style={{
             flex: 1,
@@ -944,28 +942,12 @@ if (step === "success") {
             boxSizing: "border-box",
           }}
         >
-          <h2
-            style={{
-              fontSize: 28,
-              fontWeight: 800,
-              color: "#111827",
-              marginBottom: 4,
-            }}
-          >
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: "#111827", marginBottom: 4 }}>
             {family.parentFirstName} {family.parentLastName}
           </h2>
 
-          {/* Parent email */}
           <div style={{ marginBottom: 24 }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#374151",
-                marginBottom: 6,
-              }}
-            >
+            <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 6 }}>
               Parent Email for Follow-Up
             </label>
             <input
@@ -973,269 +955,92 @@ if (step === "success") {
               value={parentEmail}
               onChange={(e) => setParentEmail(e.target.value)}
               placeholder="jane@example.com (optional)"
-              style={{
-                width: "100%",
-                fontSize: 18,
-                padding: "13px 16px",
-                borderRadius: 14,
-                border: "2px solid #e5e7eb",
-                boxSizing: "border-box",
-                outline: "none",
-              }}
+              style={{ width: "100%", fontSize: 18, padding: "13px 16px", borderRadius: 14, border: "2px solid #e5e7eb", boxSizing: "border-box", outline: "none" }}
             />
           </div>
 
-          <p style={{ fontSize: 16, color: "#6b7280", marginBottom: 16 }}>
-            Select children to check in today:
-          </p>
+          {existingChildren.length > 0 && (
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: "#374151", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Children
+            </h3>
+          )}
 
           {existingChildren.length === 0 && addedChildren.length === 0 && (
-            <div
-              style={{
-                backgroundColor: "#fef9c3",
-                border: "1px solid #fde047",
-                borderRadius: 12,
-                padding: "12px 16px",
-                marginBottom: 20,
-                fontSize: 15,
-                color: "#92400e",
-              }}
-            >
+            <div style={{ backgroundColor: "#fef9c3", border: "1px solid #fde047", borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 15, color: "#92400e" }}>
               No saved children found — add one below.
             </div>
           )}
 
-          {/* Saved children */}
           {existingChildren.map((child, i) => (
-            <div key={child.id} style={{ marginBottom: 14 }}>
-              <button
-                type="button"
-                onClick={() =>
-                  setExistingChildren((cs) =>
-                    cs.map((c, j) =>
-                      j === i ? { ...c, selected: !c.selected } : c,
-                    ),
-                  )
-                }
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 16,
-                  padding: "18px 20px",
-                  borderRadius: 16,
-                  border: `3px solid ${child.selected ? ACCENT : "#e5e7eb"}`,
-                  backgroundColor: child.selected ? ACCENT + "15" : "white",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: "50%",
-                    backgroundColor: child.selected ? ACCENT : "#e5e7eb",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  {child.selected && (
-                    <span
-                      style={{ color: "white", fontWeight: 900, fontSize: 16 }}
-                    >
-                      ✓
-                    </span>
-                  )}
-                </div>
-                <span
-                  style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}
-                >
-                  {child.name}
-                </span>
-              </button>
-
-              {child.selected && (
-                <div style={{ marginTop: 8, paddingLeft: 4 }}>
-                  {/* Birthday + Room */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: rooms.length > 0 ? "1fr 1fr" : "1fr",
-                      gap: 10,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <div>
-                      <label
-                        style={{
-                          display: "block",
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: "#6b7280",
-                          marginBottom: 4,
-                        }}
-                      >
-                        Birthday {child.dateOfBirth ? "" : "(optional)"}
-                      </label>
-                      <input
-                        type="date"
-                        value={child.dateOfBirth}
-                        max={today}
-                        min="2000-01-01"
-                        onChange={(e) =>
-                          setExistingChildren((cs) =>
-                            cs.map((c, j) =>
-                              j === i
-                                ? { ...c, dateOfBirth: e.target.value }
-                                : c,
-                            ),
-                          )
-                        }
-                        style={{
-                          width: "100%",
-                          fontSize: 16,
-                          padding: "10px 14px",
-                          borderRadius: 12,
-                          border: "2px solid #e5e7eb",
-                          boxSizing: "border-box",
-                          outline: "none",
-                        }}
-                      />
-                    </div>
-                    {rooms.length > 0 && (
-                      <div>
-                        <label
-                          style={{
-                            display: "block",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: "#6b7280",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Room (optional)
-                        </label>
-                        <RoomSelect
-                          value={child.roomId}
-                          onChange={(v) =>
-                            setExistingChildren((cs) =>
-                              cs.map((c, j) =>
-                                j === i ? { ...c, roomId: v } : c,
-                              ),
-                            )
-                          }
-                          rooms={rooms}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Allergy / medical section */}
-                  <AllergySection
-                    state={{
-                      allergies: child.allergies,
-                      allergyOther: child.allergyOther,
-                      medicalNotes: child.medicalNotes,
-                      specialInstructions: child.specialInstructions,
-                    }}
-                    onChange={(patch) =>
-                      setExistingChildren((cs) =>
-                        cs.map((c, j) => (j === i ? { ...c, ...patch } : c)),
-                      )
-                    }
+            <div
+              key={child.id}
+              style={{ backgroundColor: "white", border: "2px solid #e5e7eb", borderRadius: 16, padding: "16px 20px", marginBottom: 14 }}
+            >
+              <p style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>
+                {child.name}
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: rooms.length > 0 ? "1fr 1fr" : "1fr", gap: 10, marginBottom: 4 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 4 }}>
+                    Birthday {child.dateOfBirth ? "" : "(optional)"}
+                  </label>
+                  <input
+                    type="date"
+                    value={child.dateOfBirth}
+                    max={today}
+                    min="2000-01-01"
+                    onChange={(e) => setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, dateOfBirth: e.target.value } : c))}
+                    style={{ width: "100%", fontSize: 16, padding: "10px 14px", borderRadius: 12, border: "2px solid #e5e7eb", boxSizing: "border-box", outline: "none" }}
                   />
                 </div>
-              )}
+                {rooms.length > 0 && (
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 4 }}>
+                      Room (optional)
+                    </label>
+                    <RoomSelect
+                      value={child.roomId}
+                      onChange={(v) => setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, roomId: v } : c))}
+                      rooms={rooms}
+                    />
+                  </div>
+                )}
+              </div>
+              <AllergySection
+                state={{ allergies: child.allergies, allergyOther: child.allergyOther, medicalNotes: child.medicalNotes, specialInstructions: child.specialInstructions }}
+                onChange={(patch) => setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, ...patch } : c))}
+              />
             </div>
           ))}
 
-          {/* New children added inline */}
           {addedChildren.map((child, i) => (
             <NewChildCard
               key={i}
               child={child}
               index={existingChildren.length + i}
               rooms={rooms}
-              onChange={(updated) =>
-                setAddedChildren((cs) =>
-                  cs.map((c, j) => (j === i ? updated : c)),
-                )
-              }
-              onRemove={() =>
-                setAddedChildren((cs) => cs.filter((_, j) => j !== i))
-              }
+              onChange={(updated) => setAddedChildren((cs) => cs.map((c, j) => j === i ? updated : c))}
+              onRemove={() => setAddedChildren((cs) => cs.filter((_, j) => j !== i))}
             />
           ))}
 
           <button
             type="button"
             onClick={() => setAddedChildren((cs) => [...cs, emptyNewChild()])}
-            style={{
-              width: "100%",
-              padding: "16px",
-              borderRadius: 16,
-              border: "2px dashed #e5e7eb",
-              backgroundColor: "white",
-              color: ACCENT,
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: "pointer",
-              marginBottom: 24,
-            }}
+            style={{ width: "100%", padding: "16px", borderRadius: 16, border: "2px dashed #e5e7eb", backgroundColor: "white", color: ACCENT, fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 24 }}
           >
             + Add Another Child
           </button>
 
-          {submitError && (
-            <p
-              style={{
-                color: "#dc2626",
-                textAlign: "center",
-                marginBottom: 12,
-                fontSize: 15,
-              }}
-            >
-              {submitError}
-            </p>
-          )}
-
           <button
-            onClick={handleReturningSubmit}
-            disabled={!anyReady || submitting}
-            style={{
-              width: "100%",
-              padding: "22px",
-              borderRadius: 20,
-              border: "none",
-              backgroundColor: anyReady && !submitting ? ACCENT : "#e5e7eb",
-              color: anyReady && !submitting ? "white" : "#9ca3af",
-              fontSize: 22,
-              fontWeight: 800,
-              cursor: anyReady && !submitting ? "pointer" : "default",
-              marginBottom: 12,
-            }}
+            onClick={() => setStep("attendance")}
+            style={{ width: "100%", padding: "22px", borderRadius: 20, border: "none", backgroundColor: ACCENT, color: "white", fontSize: 22, fontWeight: 800, cursor: "pointer", marginBottom: 12 }}
           >
-            {submitting ? "Checking in…" : "Check In →"}
+            Continue →
           </button>
           <button
-            onClick={() => {
-              setStep("phone");
-              setPhone("");
-            }}
-            style={{
-              width: "100%",
-              padding: "16px",
-              borderRadius: 20,
-              border: "2px solid #e5e7eb",
-              backgroundColor: "white",
-              color: "#6b7280",
-              fontSize: 18,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
+            onClick={() => { setStep("phone"); setPhone(""); }}
+            style={{ width: "100%", padding: "16px", borderRadius: 20, border: "2px solid #e5e7eb", backgroundColor: "white", color: "#6b7280", fontSize: 18, fontWeight: 600, cursor: "pointer" }}
           >
             ← Different Family
           </button>
@@ -1461,22 +1266,22 @@ if (step === "success") {
           )}
 
           <button
-            onClick={handleNewFamilySubmit}
-            disabled={!canSubmit || submitting}
+            onClick={() => setStep("attendance")}
+            disabled={!canSubmit}
             style={{
               width: "100%",
               padding: "22px",
               borderRadius: 20,
               border: "none",
-              backgroundColor: canSubmit && !submitting ? ACCENT : "#e5e7eb",
-              color: canSubmit && !submitting ? "white" : "#9ca3af",
+              backgroundColor: canSubmit ? ACCENT : "#e5e7eb",
+              color: canSubmit ? "white" : "#9ca3af",
               fontSize: 22,
               fontWeight: 800,
-              cursor: canSubmit && !submitting ? "pointer" : "default",
+              cursor: canSubmit ? "pointer" : "default",
               marginBottom: 12,
             }}
           >
-            {submitting ? "Checking in…" : "Check In →"}
+            Continue →
           </button>
           <button
             onClick={() => setStep("phone")}
@@ -1493,6 +1298,121 @@ if (step === "success") {
             }}
           >
             ← Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ATTENDANCE SELECTION ─────────────────────────────────────────────────
+
+  if (step === "attendance") {
+    const isNewFlow = family === null;
+
+    const validNewChildren = isNewFlow
+      ? newFamilyChildren.filter((c) => c.firstName.trim() && c.lastName.trim())
+      : [];
+
+    const validAddedChildren = !isNewFlow
+      ? addedChildren.filter((c) => c.firstName.trim() && c.lastName.trim())
+      : [];
+
+    const anySelected = isNewFlow
+      ? validNewChildren.some((c) => c.selected)
+      : existingChildren.some((c) => c.selected) || validAddedChildren.some((c) => c.selected);
+
+    const hasAnyChildren =
+      existingChildren.length > 0 ||
+      validAddedChildren.length > 0 ||
+      validNewChildren.length > 0;
+
+    const displayParentName = isNewFlow
+      ? parentName
+      : family ? `${family.parentFirstName} ${family.parentLastName}` : "";
+
+    return (
+      <div style={{ minHeight: "100dvh", backgroundColor: "#f9fafb", display: "flex", flexDirection: "column" }}>
+        <Header title="Who's here today?" />
+        <div style={{ flex: 1, overflowY: "auto", padding: "32px", maxWidth: 600, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+
+          {displayParentName && (
+            <h2 style={{ fontSize: 28, fontWeight: 800, color: "#111827", marginBottom: 4 }}>
+              {displayParentName}
+            </h2>
+          )}
+          <p style={{ fontSize: 17, color: "#6b7280", marginBottom: 28 }}>
+            Tap each child who is attending today:
+          </p>
+
+          {!hasAnyChildren && (
+            <div style={{ backgroundColor: "#fef9c3", border: "1px solid #fde047", borderRadius: 12, padding: "16px", marginBottom: 20, fontSize: 15, color: "#92400e" }}>
+              No children found. Please go back to add children.
+            </div>
+          )}
+
+          {existingChildren.map((child, i) => (
+            <AttendanceCard
+              key={child.id}
+              name={child.name}
+              selected={child.selected}
+              onToggle={() => setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, selected: !c.selected } : c))}
+            />
+          ))}
+
+          {validAddedChildren.map((child, i) => {
+            const origIdx = addedChildren.indexOf(child);
+            return (
+              <AttendanceCard
+                key={`added-${i}`}
+                name={`${child.firstName} ${child.lastName}`}
+                selected={child.selected}
+                onToggle={() => setAddedChildren((cs) => cs.map((c, j) => j === origIdx ? { ...c, selected: !c.selected } : c))}
+              />
+            );
+          })}
+
+          {validNewChildren.map((child, i) => {
+            const origIdx = newFamilyChildren.indexOf(child);
+            return (
+              <AttendanceCard
+                key={i}
+                name={`${child.firstName} ${child.lastName}`}
+                selected={child.selected}
+                onToggle={() => setNewFamilyChildren((cs) => cs.map((c, j) => j === origIdx ? { ...c, selected: !c.selected } : c))}
+              />
+            );
+          })}
+
+          {submitError && (
+            <p style={{ color: "#dc2626", textAlign: "center", marginBottom: 12, fontSize: 15 }}>
+              {submitError}
+            </p>
+          )}
+
+          <button
+            onClick={isNewFlow ? handleNewFamilySubmit : handleReturningSubmit}
+            disabled={!anySelected || submitting}
+            style={{
+              width: "100%",
+              padding: "22px",
+              borderRadius: 20,
+              border: "none",
+              backgroundColor: anySelected && !submitting ? ACCENT : "#e5e7eb",
+              color: anySelected && !submitting ? "white" : "#9ca3af",
+              fontSize: 22,
+              fontWeight: 800,
+              cursor: anySelected && !submitting ? "pointer" : "default",
+              marginBottom: 12,
+            }}
+          >
+            {submitting ? "Checking in…" : "Check In →"}
+          </button>
+
+          <button
+            onClick={() => setStep(isNewFlow ? "new" : "returning-edit")}
+            style={{ width: "100%", padding: "16px", borderRadius: 20, border: "2px solid #e5e7eb", backgroundColor: "white", color: "#6b7280", fontSize: 18, fontWeight: 600, cursor: "pointer" }}
+          >
+            ← {isNewFlow ? "Back" : "Edit Family Info"}
           </button>
         </div>
       </div>
@@ -1852,5 +1772,73 @@ function NewChildCard({
         onChange={(patch) => onChange({ ...child, ...patch })}
       />
     </div>
+  );
+}
+
+// ── Attendance card (who's here today) ──────────────────────────────────────
+
+function AttendanceCard({
+  name,
+  selected,
+  onToggle,
+}: {
+  name: string;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 20,
+        padding: "22px 20px",
+        marginBottom: 14,
+        borderRadius: 20,
+        border: `3px solid ${selected ? ACCENT : "#d1d5db"}`,
+        backgroundColor: selected ? `${ACCENT}18` : "white",
+        cursor: "pointer",
+        textAlign: "left",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          backgroundColor: selected ? ACCENT : "#e5e7eb",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          fontSize: 26,
+          color: "white",
+          fontWeight: 900,
+        }}
+      >
+        {selected ? "✓" : ""}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: "#111827", lineHeight: 1.15 }}>
+          {name}
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: selected ? ACCENT : "#9ca3af",
+            marginTop: 4,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+          }}
+        >
+          {selected ? "Attending today" : "Not attending"}
+        </div>
+      </div>
+    </button>
   );
 }

@@ -168,6 +168,7 @@ export default function AppShell(props: AppShellProps) {
   const [shOpen, setShOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [impersonatingChurch, setImpersonatingChurch] = useState<string | null>(null);
 
   // Fetch the authenticated user's email once on mount
   useEffect(() => {
@@ -188,6 +189,7 @@ export default function AppShell(props: AppShellProps) {
     setCmOpen(CM_ITEMS.some(item => pathActive(pathname, item.href)));
     setMsOpen(MS_ITEMS.some(item => pathActive(pathname, item.href)));
     setShOpen(SH_ITEMS.some(item => pathActive(pathname, item.href)));
+    setImpersonatingChurch(localStorage.getItem("selected_church_name"));
     setMounted(true);
   }, [pathname]);
 
@@ -506,7 +508,51 @@ export default function AppShell(props: AppShellProps) {
         </div>
       </aside>
 
-      <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f9fafb" }}>{children}</main>
+      <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f9fafb" }}>
+        {isMasterAdmin && impersonatingChurch && (
+          <div
+            style={{
+              backgroundColor: "#1e3a5f",
+              color: "white",
+              padding: "10px 24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              fontSize: 13,
+              fontWeight: 600,
+              position: "sticky",
+              top: 0,
+              zIndex: 50,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+            }}
+          >
+            <span>👁️ Viewing as <strong>{impersonatingChurch}</strong></span>
+            <button
+              onClick={() => {
+                localStorage.removeItem("selected_church_id");
+                localStorage.removeItem("selected_church_name");
+                setImpersonatingChurch(null);
+                router.push("/dashboard");
+              }}
+              style={{
+                backgroundColor: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                color: "white",
+                borderRadius: 6,
+                padding: "5px 16px",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              ← Return to Master Admin
+            </button>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

@@ -672,7 +672,29 @@ export default function SubscriptionsPage() {
                           {isActing ? (
                             <span style={{ color: "#9ca3af", fontSize: 12 }}>Working…</span>
                           ) : (
-                            <div style={{ position: "relative", display: "inline-block" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <button
+                                onClick={() => {
+                                  localStorage.setItem("selected_church_id", church.id);
+                                  localStorage.setItem("selected_church_name", church.name);
+                                  window.location.href = `/dashboard?churchId=${church.id}`;
+                                }}
+                                style={{
+                                  padding: "6px 12px",
+                                  borderRadius: 8,
+                                  border: "1px solid #1A4A2E",
+                                  backgroundColor: "#1A4A2E",
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: "white",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                👁️ View Church
+                              </button>
+
+                            <div style={{ position: "relative" }}>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -822,6 +844,7 @@ export default function SubscriptionsPage() {
                                   ))}
                                 </div>
                               )}
+                            </div>
                             </div>
                           )}
                         </td>

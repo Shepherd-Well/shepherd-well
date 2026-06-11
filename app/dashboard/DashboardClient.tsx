@@ -140,6 +140,7 @@ export default function DashboardClient({
 
   function handleChurchSelect(church: Church) {
     localStorage.setItem("selected_church_id", church.id);
+    localStorage.setItem("selected_church_name", church.name);
     router.push(`/dashboard?churchId=${church.id}`);
   }
 
@@ -220,6 +221,7 @@ export default function DashboardClient({
           <button
             onClick={() => {
               localStorage.removeItem("selected_church_id");
+              localStorage.removeItem("selected_church_name");
               router.push("/dashboard");
             }}
             className="text-green-300 hover:text-white text-sm mb-2 block transition-colors"
