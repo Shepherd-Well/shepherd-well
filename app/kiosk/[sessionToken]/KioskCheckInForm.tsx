@@ -1630,8 +1630,8 @@ if (step === "success") {
           </p>
         )}
 
-        <button
-          onClick={handleFinalSubmit}
+<button
+  onClick={handleAttendanceSubmit}
           disabled={!anySelected || submitting}
           style={{
             width: "100%",
