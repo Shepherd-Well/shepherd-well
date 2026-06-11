@@ -689,6 +689,15 @@ export default function KioskCheckInForm({
       </div>
     );
   }
+async function handleAttendanceSubmit() {
+  setSubmitError("");
+
+  if (family) {
+    return handleReturningSubmit();
+  }
+
+  return handleNewFamilySubmit();
+}
 
   // ── SUCCESS ─────────────────────────────────────────────────────────────
 
@@ -1622,7 +1631,7 @@ if (step === "success") {
         )}
 
         <button
-          onClick={isNewFlow ? handleNewFamilySubmit : handleReturningSubmit}
+          onClick={handleFinalSubmit}
           disabled={!anySelected || submitting}
           style={{
             width: "100%",
