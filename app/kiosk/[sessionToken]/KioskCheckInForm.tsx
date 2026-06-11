@@ -439,21 +439,6 @@ export default function KioskCheckInForm({
   rooms,
   churchName,
 }: Props) {
-  const displayGroups = [
-    {
-      name: serviceName,
-      isNamed: false,
-      sessions: [
-        {
-          id: sessionToken,
-          service_name: serviceName,
-          date: "",
-          session_group: null,
-        },
-      ],
-    },
-  ];
-
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [lookupError, setLookupError] = useState("");
@@ -507,6 +492,8 @@ export default function KioskCheckInForm({
       return;
     }
 
+    console.log("[Kiosk] lookup result:", { found: data.found, childrenCount: data.children?.length ?? 0 });
+
     if (data.found) {
       setFamily(data.family);
       setParentEmail(data.family.parentEmail ?? "");
@@ -531,12 +518,14 @@ export default function KioskCheckInForm({
       );
       setAddedChildren([]);
       setStep("attendance");
+      console.log("[Kiosk] → step=attendance, existingChildren loaded:", (data.children as LookupChild[]).length);
     } else {
       setParentName("");
       setParentEmail("");
       setAuthorizedPickups("");
       setNewFamilyChildren([emptyNewChild()]);
       setStep("new");
+      console.log("[Kiosk] → step=new (no family found)");
     }
   }
 
@@ -548,6 +537,7 @@ export default function KioskCheckInForm({
     const additions = addedChildren.filter(
       (c) => c.firstName.trim() && c.lastName.trim() && c.selected,
     );
+    console.log("[Kiosk] handleReturningSubmit: selected=", selected.length, "additions=", additions.length);
     if (selected.length + additions.length === 0) return;
 
     setSubmitting(true);
@@ -578,6 +568,7 @@ export default function KioskCheckInForm({
         specialInstructions: c.specialInstructions,
       })),
     ];
+    console.log("[Kiosk] payload children count:", children.length, children.map(c => c.childName));
 
     const res = await fetch(`/api/kiosk/${sessionToken}/check-in`, {
       method: "POST",
@@ -612,6 +603,7 @@ export default function KioskCheckInForm({
     const validChildren = newFamilyChildren.filter(
       (c) => c.firstName.trim() && c.lastName.trim() && c.selected,
     );
+    console.log("[Kiosk] handleNewFamilySubmit: validSelected=", validChildren.length);
     if (
       !parentName.trim() ||
       phone.replace(/\D/g, "").length < 7 ||
@@ -696,11 +688,6 @@ export default function KioskCheckInForm({
         </p>
       </div>
     );
-  }
-
-  function handlePrintLabels() {
-    if (labels.length === 0) return;
-    window.print();
   }
 
   // ── SUCCESS ─────────────────────────────────────────────────────────────
@@ -790,9 +777,9 @@ if (step === "success") {
                     {label.childName}
                   </div>
 
-                  {label.roomName && (
+                  {label.labelType === "child" && (
                     <div className="text-xl mt-1">
-                      Room: {label.roomName}
+                      Room: {label.roomName ?? "No room assigned"}
                     </div>
                   )}
                 </div>
@@ -978,7 +965,8 @@ if (step === "success") {
 
   // ── RETURNING EDIT (info / add children) ────────────────────────────────
 
-  if (step === "returning-edit" && family) {
+  if (step === "returning-edit") {
+    if (!family) { setStep("phone"); return null; }
     return (
       <div
         style={{
@@ -1417,117 +1405,264 @@ if (step === "success") {
   // ── ATTENDANCE SELECTION ─────────────────────────────────────────────────
 
   if (step === "attendance") {
-    const isNewFlow = family === null;
+  const isNewFlow = family === null;
 
-    const validNewChildren = isNewFlow
-      ? newFamilyChildren.filter((c) => c.firstName.trim() && c.lastName.trim())
-      : [];
+  const validNewChildren = isNewFlow
+    ? newFamilyChildren.filter((c) => c.firstName.trim() && c.lastName.trim())
+    : [];
 
-    const validAddedChildren = !isNewFlow
-      ? addedChildren.filter((c) => c.firstName.trim() && c.lastName.trim())
-      : [];
+  const validAddedChildren = !isNewFlow
+    ? addedChildren.filter((c) => c.firstName.trim() && c.lastName.trim())
+    : [];
 
-    const anySelected = isNewFlow
-      ? validNewChildren.some((c) => c.selected)
-      : existingChildren.some((c) => c.selected) || validAddedChildren.some((c) => c.selected);
+  const allDisplayChildren: { name: string; selected: boolean; onToggle: () => void }[] = [
+    ...existingChildren.map((child, i) => ({
+      name: child.name,
+      selected: child.selected,
+      onToggle: () =>
+        setExistingChildren((cs) =>
+          cs.map((c, j) => (j === i ? { ...c, selected: !c.selected } : c)),
+        ),
+    })),
+    ...validAddedChildren.map((child) => {
+      const origIdx = addedChildren.indexOf(child);
+      return {
+        name: `${child.firstName} ${child.lastName}`,
+        selected: child.selected,
+        onToggle: () =>
+          setAddedChildren((cs) =>
+            cs.map((c, j) => (j === origIdx ? { ...c, selected: !c.selected } : c)),
+          ),
+      };
+    }),
+    ...validNewChildren.map((child) => {
+      const origIdx = newFamilyChildren.indexOf(child);
+      return {
+        name: `${child.firstName} ${child.lastName}`,
+        selected: child.selected,
+        onToggle: () =>
+          setNewFamilyChildren((cs) =>
+            cs.map((c, j) => (j === origIdx ? { ...c, selected: !c.selected } : c)),
+          ),
+      };
+    }),
+  ];
 
-    const hasAnyChildren =
-      existingChildren.length > 0 ||
-      validAddedChildren.length > 0 ||
-      validNewChildren.length > 0;
+  const selectedCount = allDisplayChildren.filter((c) => c.selected).length;
+  const anySelected = selectedCount > 0;
 
-    const displayParentName = isNewFlow
-      ? parentName
-      : family ? `${family.parentFirstName} ${family.parentLastName}` : "";
+  const displayParentName = isNewFlow
+    ? parentName
+    : family ? `${family.parentFirstName} ${family.parentLastName}` : "";
 
-    return (
-      <div style={{ minHeight: "100dvh", backgroundColor: "#f9fafb", display: "flex", flexDirection: "column" }}>
-        <Header title="Who's here today?" />
-        <div style={{ flex: 1, overflowY: "auto", padding: "32px", maxWidth: 600, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+  console.log("[Kiosk] attendance render: total=", allDisplayChildren.length, "selected=", selectedCount);
 
-          {displayParentName && (
-            <h2 style={{ fontSize: 28, fontWeight: 800, color: "#111827", marginBottom: 4 }}>
-              {displayParentName}
-            </h2>
-          )}
-          <p style={{ fontSize: 17, color: "#6b7280", marginBottom: 28 }}>
-            Tap each child who is attending today:
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        backgroundColor: "#f0fdf4",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Green header — visually distinct from phone step (orange) */}
+      <div
+        style={{
+          backgroundColor: "#15803d",
+          padding: "24px 32px",
+          flexShrink: 0,
+        }}
+      >
+        <p style={{ color: "white", fontWeight: 800, fontSize: 22, margin: 0 }}>
+          ✅ Who is attending today?
+        </p>
+        <p style={{ color: "#bbf7d0", opacity: 0.9, fontSize: 14, margin: "4px 0 0" }}>
+          {serviceName} · {fmtDate(serviceDate)}
+        </p>
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "28px 32px",
+          maxWidth: 600,
+          margin: "0 auto",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        {displayParentName && (
+          <p style={{ fontSize: 22, fontWeight: 800, color: "#14532d", marginBottom: 6 }}>
+            {displayParentName}
           </p>
+        )}
 
-          {!hasAnyChildren && (
-            <div style={{ backgroundColor: "#fef9c3", border: "1px solid #fde047", borderRadius: 12, padding: "16px", marginBottom: 20, fontSize: 15, color: "#92400e" }}>
-              No children found. Please go back to add children.
-            </div>
-          )}
+        <p style={{ fontSize: 18, color: "#374151", marginBottom: 24, lineHeight: 1.4 }}>
+          Tap each name to mark as attending or not attending.
+        </p>
 
-          {existingChildren.map((child, i) => (
-            <AttendanceCard
-              key={child.id}
-              name={child.name}
-              selected={child.selected}
-              onToggle={() => setExistingChildren((cs) => cs.map((c, j) => j === i ? { ...c, selected: !c.selected } : c))}
-            />
-          ))}
+        {allDisplayChildren.length === 0 && (
+          <div
+            style={{
+              backgroundColor: "#fef9c3",
+              border: "1px solid #fde047",
+              borderRadius: 12,
+              padding: "16px",
+              marginBottom: 20,
+              fontSize: 15,
+              color: "#92400e",
+            }}
+          >
+            No children found. Please go back to add children.
+          </div>
+        )}
 
-          {validAddedChildren.map((child, i) => {
-            const origIdx = addedChildren.indexOf(child);
-            return (
-              <AttendanceCard
-                key={`added-${i}`}
-                name={`${child.firstName} ${child.lastName}`}
-                selected={child.selected}
-                onToggle={() => setAddedChildren((cs) => cs.map((c, j) => j === origIdx ? { ...c, selected: !c.selected } : c))}
-              />
-            );
-          })}
-
-          {validNewChildren.map((child, i) => {
-            const origIdx = newFamilyChildren.indexOf(child);
-            return (
-              <AttendanceCard
-                key={i}
-                name={`${child.firstName} ${child.lastName}`}
-                selected={child.selected}
-                onToggle={() => setNewFamilyChildren((cs) => cs.map((c, j) => j === origIdx ? { ...c, selected: !c.selected } : c))}
-              />
-            );
-          })}
-
-          {submitError && (
-            <p style={{ color: "#dc2626", textAlign: "center", marginBottom: 12, fontSize: 15 }}>
-              {submitError}
-            </p>
-          )}
-
+        {allDisplayChildren.map((child, i) => (
           <button
-            onClick={isNewFlow ? handleNewFamilySubmit : handleReturningSubmit}
-            disabled={!anySelected || submitting}
+            key={i}
+            type="button"
+            onClick={child.onToggle}
             style={{
               width: "100%",
-              padding: "22px",
+              display: "flex",
+              alignItems: "stretch",
+              marginBottom: 16,
               borderRadius: 20,
-              border: "none",
-              backgroundColor: anySelected && !submitting ? ACCENT : "#e5e7eb",
-              color: anySelected && !submitting ? "white" : "#9ca3af",
-              fontSize: 22,
-              fontWeight: 800,
-              cursor: anySelected && !submitting ? "pointer" : "default",
+              border: `4px solid ${child.selected ? "#15803d" : "#d1d5db"}`,
+              backgroundColor: child.selected ? "#dcfce7" : "white",
+              cursor: "pointer",
+              textAlign: "left",
+              boxSizing: "border-box",
+              overflow: "hidden",
+              padding: 0,
+            }}
+          >
+            {/* Left status stripe */}
+            <div
+              style={{
+                width: 12,
+                flexShrink: 0,
+                backgroundColor: child.selected ? "#15803d" : "#d1d5db",
+              }}
+            />
+
+            <div style={{ flex: 1, padding: "22px 20px" }}>
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 900,
+                  color: "#111827",
+                  lineHeight: 1.15,
+                  marginBottom: 8,
+                }}
+              >
+                {child.name}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: "50%",
+                    backgroundColor: child.selected ? "#15803d" : "#e5e7eb",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 20,
+                    color: "white",
+                    fontWeight: 900,
+                    flexShrink: 0,
+                  }}
+                >
+                  {child.selected ? "✓" : "✕"}
+                </div>
+                <span
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 800,
+                    color: child.selected ? "#15803d" : "#6b7280",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {child.selected ? "Attending this service" : "Not attending"}
+                </span>
+              </div>
+            </div>
+          </button>
+        ))}
+
+        {selectedCount > 0 && (
+          <p
+            style={{
+              fontSize: 14,
+              color: "#15803d",
+              fontWeight: 700,
+              textAlign: "center",
               marginBottom: 12,
             }}
           >
-            {submitting ? "Checking in…" : "Check In →"}
-          </button>
+            {selectedCount} child{selectedCount !== 1 ? "ren" : ""} selected for check-in
+          </p>
+        )}
 
-          <button
-            onClick={() => setStep(isNewFlow ? "new" : "returning-edit")}
-            style={{ width: "100%", padding: "16px", borderRadius: 20, border: "2px solid #e5e7eb", backgroundColor: "white", color: "#6b7280", fontSize: 18, fontWeight: 600, cursor: "pointer" }}
-          >
-            ← {isNewFlow ? "Back" : "Edit Family Info"}
-          </button>
-        </div>
+        {submitError && (
+          <p style={{ color: "#dc2626", textAlign: "center", marginBottom: 12, fontSize: 15 }}>
+            {submitError}
+          </p>
+        )}
+
+        <button
+          onClick={isNewFlow ? handleNewFamilySubmit : handleReturningSubmit}
+          disabled={!anySelected || submitting}
+          style={{
+            width: "100%",
+            padding: "24px",
+            borderRadius: 20,
+            border: "none",
+            backgroundColor: anySelected && !submitting ? "#15803d" : "#e5e7eb",
+            color: anySelected && !submitting ? "white" : "#9ca3af",
+            fontSize: 22,
+            fontWeight: 900,
+            cursor: anySelected && !submitting ? "pointer" : "default",
+            marginBottom: 14,
+            letterSpacing: "0.02em",
+          }}
+        >
+          {submitting
+            ? "Checking in…"
+            : `Check In ${selectedCount > 0 ? selectedCount : ""} Selected Child${selectedCount !== 1 ? "ren" : ""} →`}
+        </button>
+
+        <button
+          onClick={() => setStep(isNewFlow ? "new" : "returning-edit")}
+          style={{
+            width: "100%",
+            padding: "16px",
+            borderRadius: 20,
+            border: "2px solid #d1d5db",
+            backgroundColor: "white",
+            color: "#6b7280",
+            fontSize: 18,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          ← {isNewFlow ? "Back to Family Info" : "Edit Family Info"}
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return null;
 }
@@ -1889,70 +2024,3 @@ function NewChildCard({
   );
 }
 
-// ── Attendance card (who's here today) ──────────────────────────────────────
-
-function AttendanceCard({
-  name,
-  selected,
-  onToggle,
-}: {
-  name: string;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 20,
-        padding: "22px 20px",
-        marginBottom: 14,
-        borderRadius: 20,
-        border: `3px solid ${selected ? ACCENT : "#d1d5db"}`,
-        backgroundColor: selected ? `${ACCENT}18` : "white",
-        cursor: "pointer",
-        textAlign: "left",
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          width: 52,
-          height: 52,
-          borderRadius: "50%",
-          backgroundColor: selected ? ACCENT : "#e5e7eb",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          fontSize: 26,
-          color: "white",
-          fontWeight: 900,
-        }}
-      >
-        {selected ? "✓" : ""}
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 26, fontWeight: 800, color: "#111827", lineHeight: 1.15 }}>
-          {name}
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: selected ? ACCENT : "#9ca3af",
-            marginTop: 4,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}
-        >
-          {selected ? "Attending today" : "Not attending"}
-        </div>
-      </div>
-    </button>
-  );
-}
