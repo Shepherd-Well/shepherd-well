@@ -18,6 +18,11 @@ export type AuthContext = { userId: string; churchId: string };
  * 1. Bearer token (kiosk / cron / legacy callers that still send Authorization headers)
  * 2. SSR cookie session (dashboard pages that send credentials: "include")
  *
+ * Platform-admin detection uses two sources (matching dashboard/page.tsx and the
+ * subscriptions API):
+ *   a. platform_admins DB table
+ *   b. OWNER_EMAILS env var (comma-separated)
+ *
  * Church resolution order:
  * 1. If user is a platform admin AND x-selected-church-id header is present,
  *    that church_id is used directly (platform admin impersonation).
@@ -26,12 +31,14 @@ export type AuthContext = { userId: string; churchId: string };
 export async function getAuthContext(request: NextRequest): Promise<AuthContext | null> {
   const admin = adminClient();
   let userId: string | null = null;
+  let userEmail: string | null = null;
 
   // 1. Try Bearer token first (kiosk, cron, and other server-to-server callers)
   const token = request.headers.get('authorization')?.replace('Bearer ', '');
   if (token) {
     const { data: { user } } = await admin.auth.getUser(token);
     userId = user?.id ?? null;
+    userEmail = user?.email ?? null;
   }
 
   // 2. Fall back to SSR cookie session (browser dashboard)
@@ -39,6 +46,7 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext 
     const ssrClient = await createSSRClient();
     const { data: { user } } = await ssrClient.auth.getUser();
     userId = user?.id ?? null;
+    userEmail = user?.email ?? null;
   }
 
   if (!userId) return null;
@@ -46,13 +54,24 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext 
   // 3. Platform admin church override via x-selected-church-id header
   const selectedChurchId = request.headers.get('x-selected-church-id');
   if (selectedChurchId) {
+    // Check platform_admins table
     const { data: adminRow } = await admin
       .from('platform_admins')
       .select('role')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (adminRow) {
+    // Also check OWNER_EMAILS env var (same mechanism as subscriptions API and dashboard page)
+    const ownerEmails = (process.env.OWNER_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const isOwnerEmail =
+      !!userEmail &&
+      ownerEmails.length > 0 &&
+      ownerEmails.includes(userEmail.toLowerCase());
+
+    if (adminRow || isOwnerEmail) {
       const { data: church } = await admin
         .from('churches')
         .select('id')

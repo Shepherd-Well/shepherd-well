@@ -13,46 +13,69 @@ export default async function DashboardPage({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  console.log("server dashboard getUser:", {
-    hasUser: !!user,
-  });
-
   if (!user) redirect("/");
 
   const params = await searchParams;
   const admin = adminClient();
 
+  // ── Determine platform-admin status ───────────────────────────────────────
+  // Two sources of truth, same as the subscriptions API:
+  //   1. platform_admins DB table
+  //   2. OWNER_EMAILS env var (comma-separated)
   const { data: adminRow } = await admin
     .from("platform_admins")
     .select("role")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (adminRow) {
-    const selectedChurchId =
-      typeof params.churchId === "string" ? params.churchId : null;
+  const ownerEmails = (process.env.OWNER_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  const isOwnerEmail =
+    !!user.email &&
+    ownerEmails.length > 0 &&
+    ownerEmails.includes(user.email.toLowerCase());
 
-    if (selectedChurchId) {
-      const { data: churchData } = await admin
-        .from("churches")
-        .select("id, name")
-        .eq("id", selectedChurchId)
-        .maybeSingle();
+  const isPlatformAdmin = !!adminRow || isOwnerEmail;
 
-      if (churchData) {
-        return (
-          <DashboardClient
-            userId={user.id}
-            userEmail={user.email ?? null}
-            churchId={churchData.id}
-            churchName={churchData.name}
-            isPlatformAdmin
-            allChurches={[]}
-          />
-        );
-      }
+  // ── Handle ?churchId param ────────────────────────────────────────────────
+  // If present, ONLY platform admins may use it.
+  // Never silently fall through to a different church on failure.
+  const requestedChurchId =
+    typeof params.churchId === "string" ? params.churchId : null;
+
+  if (requestedChurchId) {
+    if (!isPlatformAdmin) {
+      // Normal user attempting church context switch — strip param and redirect.
+      redirect("/dashboard");
     }
 
+    const { data: churchData } = await admin
+      .from("churches")
+      .select("id, name")
+      .eq("id", requestedChurchId)
+      .maybeSingle();
+
+    if (!churchData) {
+      // churchId not found — return to selector, never fall back to another church.
+      redirect("/dashboard");
+    }
+
+    return (
+      <DashboardClient
+        userId={user.id}
+        userEmail={user.email ?? null}
+        churchId={churchData.id}
+        churchName={churchData.name}
+        isPlatformAdmin
+        allChurches={[]}
+      />
+    );
+  }
+
+  // ── Platform admin without churchId → church selector ────────────────────
+  if (isPlatformAdmin) {
     const { data: churches } = await admin
       .from("churches")
       .select("id, name")
@@ -70,7 +93,7 @@ export default async function DashboardPage({
     );
   }
 
-  // Normal church user
+  // ── Normal church user ────────────────────────────────────────────────────
   const { data: churchUsers } = await admin
     .from("church_users")
     .select("church_id, churches(name)")
