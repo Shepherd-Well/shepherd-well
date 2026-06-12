@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import MinistryShell from "@/components/layout/MinistryShell";
@@ -112,6 +112,9 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
     isSeniors ? "Total Senior Adults" :
     "Total Children";
 
+  const selectedChurchIdRef = useRef<string | null>(null);
+  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
+
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [members, setMembers] = useState<PipelineMember[]>([]);
@@ -135,7 +138,7 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
   async function loadStages(t: string) {
     try {
       const res = await fetch(`/api/ministry/${type}/pipeline/stages`, {
-        headers: { Authorization: `Bearer ${t}` },
+        headers: { Authorization: `Bearer ${t}`, ...ch() },
       });
       if (res.ok) {
         const data = await res.json();
@@ -152,7 +155,7 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
 
   async function loadMembers(t: string) {
     const res = await fetch(`/api/ministry/${type}/pipeline`, {
-      headers: { Authorization: `Bearer ${t}` },
+      headers: { Authorization: `Bearer ${t}`, ...ch() },
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -167,6 +170,7 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
+      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
       await Promise.all([loadStages(t), loadMembers(t)]);
       setLoading(false);
@@ -188,6 +192,7 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        ...ch(),
       },
       body: JSON.stringify({ pipeline_stage: selectedStage, note: moveNote }),
     });
@@ -253,6 +258,7 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...ch(),
         },
         body: JSON.stringify({
           stages: editStages.map((s, idx) => ({
@@ -289,9 +295,11 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-400">Loading…</div>
-      </div>
+      <MinistryShell type={type}>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-gray-400">Loading…</div>
+        </div>
+      </MinistryShell>
     );
   }
 

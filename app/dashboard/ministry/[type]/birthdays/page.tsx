@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -47,6 +47,9 @@ export default function MinistryBirthdaysPage({ params }: { params: Promise<{ ty
   const cfg = MINISTRY_CONFIG[type];
   const showAnniversary = ANNIVERSARY_TYPES.has(type);
 
+  const selectedChurchIdRef = useRef<string | null>(null);
+  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
+
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<BirthdayEntry[]>([]);
 
@@ -60,11 +63,12 @@ export default function MinistryBirthdaysPage({ params }: { params: Promise<{ ty
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
+      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
 
       const [rosterRes, membersRes, visitorsRes] = await Promise.all([
-        fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/members", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch(`/api/ministry/${type}/visitors`, { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
+        fetch("/api/members", { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
+        fetch(`/api/ministry/${type}/visitors`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
       ]);
 
       if (!rosterRes.ok) { setLoading(false); return; }
@@ -167,7 +171,7 @@ export default function MinistryBirthdaysPage({ params }: { params: Promise<{ ty
     return `🎉 ${e.age} Years in Faith`;
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type={type}><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type={type}>

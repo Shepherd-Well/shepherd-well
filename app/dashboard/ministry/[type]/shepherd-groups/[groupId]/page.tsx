@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -34,6 +34,9 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
   const router = useRouter();
   const cfg = MINISTRY_CONFIG[type];
 
+  const selectedChurchIdRef = useRef<string | null>(null);
+  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
+
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [group, setGroup] = useState<any>(null);
@@ -58,8 +61,8 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
 
   async function loadGroup(t: string) {
     const [groupRes, contactsRes] = await Promise.all([
-      fetch(`/api/ministry/${type}/shepherd-groups`, { headers: { Authorization: `Bearer ${t}` } }),
-      fetch(`/api/ministry/${type}/shepherd-groups/${groupId}/contacts`, { headers: { Authorization: `Bearer ${t}` } }),
+      fetch(`/api/ministry/${type}/shepherd-groups`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
+      fetch(`/api/ministry/${type}/shepherd-groups/${groupId}/contacts`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
     ]);
     const groupsData = await groupRes.json();
     const contactsData = await contactsRes.json();
@@ -80,11 +83,12 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
+      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
 
       const [_, rosterRes] = await Promise.all([
         loadGroup(t),
-        fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
       ]);
       const rData = await rosterRes.json();
       setRosterMembers((rData.roster ?? []).map((r: any) => ({ id: r.member_id, first_name: r.member?.first_name ?? "?", last_name: r.member?.last_name ?? "?" })));
@@ -98,7 +102,7 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
     setSavingVol(true);
     await fetch(`/api/ministry/${type}/shepherd-groups/${groupId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ volunteer_name: editVol.name, volunteer_email: editVol.email, volunteer_phone: editVol.phone, leadership_kid_id: editVol.leadership_kid_id }),
     });
     setSavingVol(false);
@@ -110,7 +114,7 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
     setAddingMember(true); setAddError("");
     const res = await fetch(`/api/ministry/${type}/shepherd-groups/${groupId}/members`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ member_id: addMemberId }),
     });
     if (!res.ok) { const d = await res.json(); setAddError(d.error ?? "Error"); setAddingMember(false); return; }
@@ -120,7 +124,7 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
 
   async function removeMember(memberId: string) {
     if (!token || !confirm("Remove from group?")) return;
-    await fetch(`/api/ministry/${type}/shepherd-groups/${groupId}/members/${memberId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await fetch(`/api/ministry/${type}/shepherd-groups/${groupId}/members/${memberId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, ...ch() } });
     if (token) await loadGroup(token);
   }
 
@@ -137,7 +141,7 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
     setLoggingContact(true);
     const res = await fetch(`/api/ministry/${type}/shepherd-groups/${groupId}/contacts`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ member_id: contactModal.member.id, contact_type: contactModal.type, date: contactDate, note: contactNote }),
     });
     setLoggingContact(false);
@@ -162,7 +166,7 @@ export default function ShepherdGroupDetailPage({ params }: { params: Promise<{ 
   }
 
   if (!cfg) return <MinistryShell type={type}><div className="p-8 text-gray-500">Ministry not found.</div></MinistryShell>;
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type={type}><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
   if (!group) return <MinistryShell type={type}><div className="p-8 text-gray-500">Group not found.</div></MinistryShell>;
 
   const groupMemberIds = new Set((group.members ?? []).map((m: any) => m.id));

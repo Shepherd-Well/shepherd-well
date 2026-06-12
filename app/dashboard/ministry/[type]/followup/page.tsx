@@ -189,7 +189,7 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
 
   if (type === 'childrens') return <ChildrensFollowUpPage type={type} />;
   if (!cfg) return <MinistryShell type={type}><div className="p-8 text-gray-500">Ministry not found.</div></MinistryShell>;
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type={type}><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type={type}>
