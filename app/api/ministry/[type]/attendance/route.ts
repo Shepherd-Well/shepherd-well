@@ -23,6 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: members } = await admin
     .from('members')
     .select('id, first_name, last_name')
+    .eq('church_id', churchId)
     .in('id', memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000']);
 
   const memberMap: Record<string, any> = {};
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: existing } = await admin
     .from('ministry_attendance')
     .select('id')
+    .eq('church_id', churchId)
     .eq('member_id', member_id)
     .eq('ministry_type', type)
     .eq('session_date', session_date)

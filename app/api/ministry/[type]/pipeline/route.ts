@@ -31,6 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ type
       ? await admin
           .from('cm_visitor_families')
           .select('id, parent1_email, visit_date')
+          .eq('church_id', churchId)
           .in('id', familyIds)
       : { data: [] };
 
@@ -81,6 +82,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ type
   const { data: members } = await admin
     .from(memberTable)
     .select('id, first_name, last_name, email')
+    .eq('church_id', churchId)
     .in('id', memberIds);
   const memberMap: Record<string, any> = {};
   for (const m of members ?? []) memberMap[m.id] = m;

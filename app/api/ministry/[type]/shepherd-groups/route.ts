@@ -39,6 +39,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: memberships } = await admin
     .from('shepherd_group_members')
     .select('group_id, member_id')
+    .eq('church_id', churchId)
     .in('group_id', groupIds);
 
   // Collect all member_ids
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: members } = await admin
     .from('members')
     .select('id, first_name, last_name, email, phone')
+    .eq('church_id', churchId)
     .in('id', allMemberIds.length ? allMemberIds : ['00000000-0000-0000-0000-000000000000']);
 
   const memberMap: Record<string, any> = {};
@@ -60,6 +62,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: contacts } = await admin
     .from('shepherd_group_contacts')
     .select('*')
+    .eq('church_id', churchId)
     .in('group_id', groupIds)
     .eq('period_year', periodYear)
     .eq('period_month', periodMonth);

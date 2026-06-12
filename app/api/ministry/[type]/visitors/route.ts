@@ -24,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ type
       ? await admin
           .from('cm_visitor_families')
           .select('id, parent1_first_name, parent1_last_name, parent1_phone, parent1_email, visit_date, status')
+          .eq('church_id', churchId)
           .in('id', familyIds)
       : { data: [] };
 

@@ -46,7 +46,7 @@ export async function GET(
     if (!familyRecord) return Response.json({ error: 'Record not found' }, { status: 404 });
 
     const [logRes, churchRes] = await Promise.all([
-      admin.from('ministry_followup_log').select('personalized_message').eq('record_id', recordId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      admin.from('ministry_followup_log').select('personalized_message').eq('church_id', churchId).eq('record_id', recordId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       admin.from('churches').select('name').eq('id', churchId).maybeSingle(),
     ]);
 
@@ -76,12 +76,14 @@ export async function GET(
   const { data: session } = await admin
     .from('ministry_checkin_sessions')
     .select('service_name, date')
+    .eq('church_id', churchId)
     .eq('id', record.session_id)
     .maybeSingle();
 
   const { data: logEntry } = await admin
     .from('ministry_followup_log')
     .select('personalized_message')
+    .eq('church_id', churchId)
     .eq('record_id', recordId)
     .order('created_at', { ascending: false })
     .limit(1)

@@ -27,6 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { data: existing } = await admin
       .from('ministry_checkin_records')
       .select('id')
+      .eq('church_id', churchId)
       .eq('session_id', sessionId)
       .eq('member_id', memberId)
       .maybeSingle();
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { data: member } = await admin
       .from('members')
       .select('first_name, last_name')
+      .eq('church_id', churchId)
       .eq('id', memberId)
       .maybeSingle();
 

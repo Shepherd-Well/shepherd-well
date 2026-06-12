@@ -19,6 +19,7 @@ export async function GET(
   const { data: memberships } = await admin
     .from('shepherd_group_members')
     .select('member_id')
+    .eq('church_id', churchId)
     .eq('group_id', groupId);
 
   const memberIds = (memberships ?? []).map((m: any) => m.member_id);
@@ -26,6 +27,7 @@ export async function GET(
   const { data: members } = await admin
     .from('members')
     .select('id, first_name, last_name, email, phone')
+    .eq('church_id', churchId)
     .in('id', memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000']);
 
   const memberMap: Record<string, any> = {};
@@ -35,6 +37,7 @@ export async function GET(
   const { data: contacts } = await admin
     .from('shepherd_group_contacts')
     .select('*')
+    .eq('church_id', churchId)
     .eq('group_id', groupId)
     .eq('period_year', periodYear)
     .eq('period_month', periodMonth);
@@ -99,6 +102,7 @@ export async function POST(
   const { data: existing } = await admin
     .from('shepherd_group_contacts')
     .select('id')
+    .eq('church_id', churchId)
     .eq('group_id', groupId)
     .eq('member_id', member_id)
     .eq('period_year', periodYear)

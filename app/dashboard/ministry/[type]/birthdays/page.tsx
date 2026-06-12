@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 import { MINISTRY_CONFIG } from "@/lib/ministry-config";
 
@@ -47,9 +48,6 @@ export default function MinistryBirthdaysPage({ params }: { params: Promise<{ ty
   const cfg = MINISTRY_CONFIG[type];
   const showAnniversary = ANNIVERSARY_TYPES.has(type);
 
-  const selectedChurchIdRef = useRef<string | null>(null);
-  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<BirthdayEntry[]>([]);
 
@@ -63,12 +61,11 @@ export default function MinistryBirthdaysPage({ params }: { params: Promise<{ ty
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
-      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
 
       const [rosterRes, membersRes, visitorsRes] = await Promise.all([
-        fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
-        fetch("/api/members", { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
-        fetch(`/api/ministry/${type}/visitors`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
+        apiFetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/members", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch(`/api/ministry/${type}/visitors`, { headers: { Authorization: `Bearer ${t}` } }),
       ]);
 
       if (!rosterRes.ok) { setLoading(false); return; }

@@ -13,6 +13,7 @@ export async function DELETE(
   const { error } = await adminClient()
     .from('shepherd_group_members')
     .delete()
+    .eq('church_id', churchId)
     .eq('group_id', groupId)
     .eq('member_id', memberId);
 

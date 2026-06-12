@@ -39,8 +39,8 @@ export async function DELETE(
   const { churchId } = ctx;
 
   const admin = adminClient();
-  await admin.from('shepherd_group_members').delete().eq('group_id', groupId);
-  await admin.from('shepherd_group_contacts').delete().eq('group_id', groupId);
+  await admin.from('shepherd_group_members').delete().eq('group_id', groupId).eq('church_id', churchId);
+  await admin.from('shepherd_group_contacts').delete().eq('group_id', groupId).eq('church_id', churchId);
   const { error } = await admin.from('shepherd_groups').delete().eq('id', groupId).eq('church_id', churchId);
   if (error) return Response.json({ error: error.message }, { status: 400 });
   return Response.json({ success: true });

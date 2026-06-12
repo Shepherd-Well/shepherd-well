@@ -1,9 +1,10 @@
 ﻿"use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 import { MINISTRY_CONFIG, stageColor, isInvitationOnly } from "@/lib/ministry-config";
 
@@ -30,8 +31,6 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
   const router = useRouter();
   const cfg = MINISTRY_CONFIG[type];
 
-  const selectedChurchIdRef = useRef<string | null>(null);
-  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
 
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -62,14 +61,14 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
   const [saveError, setSaveError] = useState("");
 
   async function load(t: string) {
-    const res = await fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}`, ...ch() } });
+    const res = await apiFetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}` } });
     const data = await res.json();
     setRoster(data.roster ?? []);
   }
 
   async function loadVisitors(t: string) {
     if (isInvitationOnly(type)) return;
-    const res = await fetch(`/api/ministry/${type}/visitors`, { headers: { Authorization: `Bearer ${t}`, ...ch() } });
+    const res = await apiFetch(`/api/ministry/${type}/visitors`, { headers: { Authorization: `Bearer ${t}` } });
     if (res.ok) { const d = await res.json(); setVisitors(d.visitors ?? []); }
   }
 
@@ -83,12 +82,11 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
-      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
 
       const [_, membersRes] = await Promise.all([
         load(t),
-        fetch("/api/members", { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
+        apiFetch("/api/members", { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       const mData = await membersRes.json();
       setAllMembers(mData.members ?? []);
@@ -101,8 +99,8 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
   async function addVisitor() {
     if (!token || !visitorForm.first_name.trim() || !visitorForm.last_name.trim()) return;
     setAddingVisitor(true);
-    const res = await fetch(`/api/ministry/${type}/visitors`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+    const res = await apiFetch(`/api/ministry/${type}/visitors`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(visitorForm),
     });
     setAddingVisitor(false);
@@ -111,15 +109,15 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
 
   async function logVisit(visitorId: string) {
     if (!token) return;
-    await fetch(`/api/ministry/${type}/visitors/${visitorId}/attend`, { method: "POST", headers: { Authorization: `Bearer ${token}`, ...ch() } });
+    await apiFetch(`/api/ministry/${type}/visitors/${visitorId}/attend`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     await loadVisitors(token);
   }
 
   async function promoteVisitor(visitorId: string) {
     if (!token) return;
     setPromotingId(visitorId);
-    const res = await fetch(`/api/ministry/${type}/visitors/${visitorId}/promote`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+    const res = await apiFetch(`/api/ministry/${type}/visitors/${visitorId}/promote`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({}),
     });
     setPromotingId(null);
@@ -147,9 +145,9 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
   async function addMember(member: MemberResult) {
     if (!token) return;
     setAdding(member.id); setAddError("");
-    const res = await fetch(`/api/ministry/${type}/roster`, {
+    const res = await apiFetch(`/api/ministry/${type}/roster`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ member_id: member.id, pipeline_stage: cfg?.stages[0] ?? null }),
     });
     if (!res.ok) { const d = await res.json(); setAddError(d.error ?? "Error"); setAdding(null); return; }
@@ -168,9 +166,9 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
   async function saveEdit() {
     if (!editEntry || !token) return;
     setSaving(true); setSaveError("");
-    const res = await fetch(`/api/ministry/${type}/roster/${editEntry.member_id}`, {
+    const res = await apiFetch(`/api/ministry/${type}/roster/${editEntry.member_id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ pipeline_stage: editStage || null, status: editStatus, notes: editNotes }),
     });
     if (!res.ok) { const d = await res.json(); setSaveError(d.error ?? "Error"); setSaving(false); return; }
@@ -182,9 +180,9 @@ export default function RosterPage({ params }: { params: Promise<{ type: string 
   async function removeMember() {
     if (!confirmRemove || !token) return;
     setRemoving(true);
-    await fetch(`/api/ministry/${type}/roster/${confirmRemove.member_id}`, {
+    await apiFetch(`/api/ministry/${type}/roster/${confirmRemove.member_id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}`, ...ch() },
+      headers: { Authorization: `Bearer ${token}` },
     });
     setRemoving(false);
     setConfirmRemove(null);

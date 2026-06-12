@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useEffect, useRef, useState, useMemo } from "react";
+import { use, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 import { MINISTRY_CONFIG } from "@/lib/ministry-config";
 
@@ -55,9 +56,6 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
   const router = useRouter();
   const cfg = MINISTRY_CONFIG[type];
 
-  const selectedChurchIdRef = useRef<string | null>(null);
-  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -81,7 +79,7 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
   const [sendMsg, setSendMsg] = useState("");
 
   async function load(t: string) {
-    const res = await fetch(`/api/ministry/${type}/followup`, { headers: { Authorization: `Bearer ${t}`, ...ch() } });
+    const res = await apiFetch(`/api/ministry/${type}/followup`, { headers: { Authorization: `Bearer ${t}` } });
     if (!res.ok) return;
     const data = await res.json();
     setMembers(data.members ?? []);
@@ -101,7 +99,6 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
-      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
       await load(t);
       setLoading(false);
@@ -120,9 +117,9 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
   async function logTouch() {
     if (!touchModal || !token) return;
     setLogging(true);
-    const res = await fetch(`/api/ministry/${type}/followup/${touchModal.member.id}`, {
+    const res = await apiFetch(`/api/ministry/${type}/followup/${touchModal.member.id}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ touch: touchModal.touch, date: touchDate, note: touchNote }),
     });
     setLogging(false);
@@ -135,9 +132,9 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
   async function saveSettings() {
     if (!token) return;
     setSavingSettings(true);
-    await fetch(`/api/ministry/${type}/followup/settings`, {
+    await apiFetch(`/api/ministry/${type}/followup/settings`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(settingsForm),
     });
     setSavingSettings(false);
@@ -148,9 +145,9 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
   async function sendReminders() {
     if (!token) return;
     setSending(true); setSendMsg("");
-    const res = await fetch(`/api/ministry/${type}/followup`, {
+    const res = await apiFetch(`/api/ministry/${type}/followup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ action: "remind" }),
     });
     const data = await res.json();
@@ -385,8 +382,6 @@ export default function FollowUpPage({ params }: { params: Promise<{ type: strin
 
 function ChildrensFollowUpPage({ type }: { type: string }) {
   const router = useRouter();
-  const selectedChurchIdRef = useRef<string | null>(null);
-  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
 
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -417,13 +412,11 @@ function ChildrensFollowUpPage({ type }: { type: string }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
-      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
-      const headers = { Authorization: `Bearer ${t}`, ...ch() };
       const [parentsRes, familiesRes, followupRes] = await Promise.all([
-        fetch('/api/children-ministry/parents', { headers }),
-        fetch('/api/children-ministry/visitors', { headers }),
-        fetch('/api/ministry/childrens/followup', { headers }),
+        apiFetch('/api/children-ministry/parents', { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch('/api/children-ministry/visitors', { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch('/api/ministry/childrens/followup', { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       if (parentsRes.ok) {
         const d = await parentsRes.json();
@@ -565,9 +558,9 @@ function ChildrensFollowUpPage({ type }: { type: string }) {
         [`touch${touch}_date`]: new Date().toISOString().slice(0, 10),
       },
     }));
-    await fetch(`/api/ministry/childrens/followup/${childId}`, {
+    await apiFetch(`/api/ministry/childrens/followup/${childId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...ch() },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ touch, date: new Date().toISOString().slice(0, 10) }),
     });
     setLoggingTouch(null);

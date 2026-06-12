@@ -20,6 +20,7 @@ export async function POST(
   const { count } = await admin
     .from('shepherd_group_members')
     .select('*', { count: 'exact', head: true })
+    .eq('church_id', churchId)
     .eq('group_id', groupId);
 
   if ((count ?? 0) >= MAX_MEMBERS) {

@@ -1,9 +1,10 @@
 ﻿"use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 import { MINISTRY_CONFIG } from "@/lib/ministry-config";
 
@@ -35,9 +36,6 @@ export default function ShepherdGroupsPage({ params }: { params: Promise<{ type:
   const router = useRouter();
   const cfg = MINISTRY_CONFIG[type];
 
-  const selectedChurchIdRef = useRef<string | null>(null);
-  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -58,7 +56,7 @@ export default function ShepherdGroupsPage({ params }: { params: Promise<{ type:
   const [createError, setCreateError] = useState("");
 
   async function load(t: string, r: number = 5) {
-    const res = await fetch(`/api/ministry/${type}/shepherd-groups?ratio=${r}`, { headers: { Authorization: `Bearer ${t}`, ...ch() } });
+    const res = await apiFetch(`/api/ministry/${type}/shepherd-groups?ratio=${r}`, { headers: { Authorization: `Bearer ${t}` } });
     if (!res.ok) return;
     const data = await res.json();
     setGroups(data.groups ?? []);
@@ -78,7 +76,6 @@ export default function ShepherdGroupsPage({ params }: { params: Promise<{ type:
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
-      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
 
       const stored = localStorage.getItem(`sw_shepherd_ratio_${type}`);
@@ -87,7 +84,7 @@ export default function ShepherdGroupsPage({ params }: { params: Promise<{ type:
 
       const [_, membersRes] = await Promise.all([
         load(t, storedRatio),
-        fetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}`, ...ch() } }),
+        apiFetch(`/api/ministry/${type}/roster`, { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       const mData = await membersRes.json();
       setAllMembers((mData.roster ?? []).map((r: any) => ({ id: r.member_id, first_name: r.member?.first_name ?? "?", last_name: r.member?.last_name ?? "?" })));
@@ -101,9 +98,9 @@ export default function ShepherdGroupsPage({ params }: { params: Promise<{ type:
     const allIds = [...new Set([form.leadership_kid_id, ...form.member_ids].filter(Boolean))];
     if (allIds.length > 5) { setCreateError("Maximum 5 members per group"); return; }
     setCreating(true); setCreateError("");
-    const res = await fetch(`/api/ministry/${type}/shepherd-groups`, {
+    const res = await apiFetch(`/api/ministry/${type}/shepherd-groups`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ ...form, member_ids: allIds }),
     });
     if (!res.ok) { const d = await res.json(); setCreateError(d.error ?? "Error"); setCreating(false); return; }
@@ -115,7 +112,7 @@ export default function ShepherdGroupsPage({ params }: { params: Promise<{ type:
 
   async function deleteGroup(groupId: string) {
     if (!confirm("Delete this group? All contact history will be lost.")) return;
-    await fetch(`/api/ministry/${type}/shepherd-groups/${groupId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, ...ch() } });
+    await apiFetch(`/api/ministry/${type}/shepherd-groups/${groupId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
     if (token) await load(token, ratio);
   }
 

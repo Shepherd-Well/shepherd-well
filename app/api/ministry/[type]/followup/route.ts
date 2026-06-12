@@ -80,6 +80,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const { data: members } = await admin
         .from('members')
         .select('id, first_name, last_name, email, phone')
+        .eq('church_id', churchId)
         .in('id', memberIds);
       for (const m of members ?? []) memberMap[m.id] = m;
     }
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const memberIds = (roster ?? []).map((r: any) => r.member_id);
   if (!memberIds.length) return Response.json({ sent: 0 });
 
-  const { data: members } = await admin.from('members').select('id, first_name, last_name').in('id', memberIds);
+  const { data: members } = await admin.from('members').select('id, first_name, last_name').eq('church_id', churchId).in('id', memberIds);
   const { data: logs } = await admin.from('ministry_followup_log').select('*').eq('church_id', churchId).eq('ministry_type', type).eq('period_year', period.year).eq('period_month', period.month).in('member_id', memberIds);
   const logMap: Record<string, any> = {};
   for (const l of logs ?? []) logMap[l.member_id] = l;

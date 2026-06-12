@@ -67,6 +67,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: members } = await admin
     .from('members')
     .select('id, first_name, last_name, email, phone')
+    .eq('church_id', churchId)
     .in('id', memberIds);
 
   const memberMap: Record<string, any> = {};

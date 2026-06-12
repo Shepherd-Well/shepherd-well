@@ -1,8 +1,9 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 import { MINISTRY_CONFIG, STAGE_COLORS } from "@/lib/ministry-config";
 
@@ -112,9 +113,6 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
     isSeniors ? "Total Senior Adults" :
     "Total Children";
 
-  const selectedChurchIdRef = useRef<string | null>(null);
-  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
   const [members, setMembers] = useState<PipelineMember[]>([]);
@@ -137,8 +135,8 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
 
   async function loadStages(t: string) {
     try {
-      const res = await fetch(`/api/ministry/${type}/pipeline/stages`, {
-        headers: { Authorization: `Bearer ${t}`, ...ch() },
+      const res = await apiFetch(`/api/ministry/${type}/pipeline/stages`, {
+        headers: { Authorization: `Bearer ${t}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -154,8 +152,8 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
   }
 
   async function loadMembers(t: string) {
-    const res = await fetch(`/api/ministry/${type}/pipeline`, {
-      headers: { Authorization: `Bearer ${t}`, ...ch() },
+    const res = await apiFetch(`/api/ministry/${type}/pipeline`, {
+      headers: { Authorization: `Bearer ${t}` },
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -170,7 +168,6 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
-      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
       await Promise.all([loadStages(t), loadMembers(t)]);
       setLoading(false);
@@ -187,12 +184,11 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
   async function moveStage() {
     if (!moveModal || !token || !selectedStage) return;
     setMoving(true);
-    await fetch(`/api/ministry/${type}/pipeline/${moveModal.member.id}`, {
+    await apiFetch(`/api/ministry/${type}/pipeline/${moveModal.member.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
-        ...ch(),
       },
       body: JSON.stringify({ pipeline_stage: selectedStage, note: moveNote }),
     });
@@ -253,12 +249,11 @@ export default function PipelinePage({ params }: { params: Promise<{ type: strin
     setSaving(true);
     setSaveError("");
     try {
-      const res = await fetch(`/api/ministry/${type}/pipeline/stages`, {
+      const res = await apiFetch(`/api/ministry/${type}/pipeline/stages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          ...ch(),
         },
         body: JSON.stringify({
           stages: editStages.map((s, idx) => ({
