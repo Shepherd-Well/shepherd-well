@@ -203,6 +203,14 @@ export default function SubscriptionsPage() {
   const [confirmSuspend, setConfirmSuspend] = useState<{ id: string; name: string } | null>(null);
   const [confirmMarkPaid, setConfirmMarkPaid] = useState<{ id: string; name: string } | null>(null);
 
+  const [showAddChurch, setShowAddChurch] = useState(false);
+  const [addForm, setAddForm] = useState({
+    churchName: "", city: "", state: "", churchEmail: "", phone: "",
+    ownerEmail: "", ownerPassword: "", subscriptionStatus: "trial" as "trial" | "active",
+  });
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState("");
+
   async function load(t: string) {
     setPageError("");
     setAccessDenied(false);
@@ -270,6 +278,36 @@ export default function SubscriptionsPage() {
       );
     }
     setActionLoading(null);
+  }
+
+  async function createChurch() {
+    if (!token) return;
+    if (!addForm.churchName.trim()) { setAddError("Church name is required."); return; }
+    if (!addForm.ownerEmail.trim()) { setAddError("Owner email is required."); return; }
+    if (addForm.ownerPassword.length < 8) { setAddError("Password must be at least 8 characters."); return; }
+
+    setAddLoading(true);
+    setAddError("");
+
+    const res = await fetch("/api/master-admin/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(addForm),
+    });
+
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setAddError((d as { error?: string }).error ?? "Failed to create church.");
+      setAddLoading(false);
+      return;
+    }
+
+    const d = await res.json();
+    setChurches((prev) => [d.church, ...prev]);
+    setShowAddChurch(false);
+    setAddForm({ churchName: "", city: "", state: "", churchEmail: "", phone: "", ownerEmail: "", ownerPassword: "", subscriptionStatus: "trial" });
+    setAddError("");
+    setAddLoading(false);
   }
 
   // Summary stats — computed over all churches regardless of filter
@@ -454,14 +492,32 @@ export default function SubscriptionsPage() {
         {/* Search + Filter + Sort */}
         {!loading && !pageError && !accessDenied && (
           <div className="flex flex-col gap-3 mb-4">
-            <input
-              type="text"
-              placeholder="Search church, city, email, phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-800"
-              style={{ padding: "10px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Search church, city, email, phone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-800"
+                style={{ padding: "10px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
+              />
+              <button
+                onClick={() => { setAddError(""); setShowAddChurch(true); }}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 12,
+                  border: "none",
+                  backgroundColor: DARK_GREEN,
+                  color: "white",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                + Add Church
+              </button>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Status filter pills */}
@@ -868,6 +924,145 @@ export default function SubscriptionsPage() {
           </div>
         )}
       </div>
+
+      {/* Add Church Modal */}
+      {showAddChurch && (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)", zIndex: 50, padding: 16 }}
+          onClick={() => !addLoading && setShowAddChurch(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full"
+            style={{ maxWidth: 520, padding: 32, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🏛️</div>
+            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
+              Add New Church
+            </h2>
+            <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 24px" }}>
+              Creates the church record, owner account, departments, and default check-in setup.
+            </p>
+
+            {addError && (
+              <div style={{ backgroundColor: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#dc2626", marginBottom: 16 }}>
+                {addError}
+              </div>
+            )}
+
+            {/* Church info */}
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>Church</p>
+
+            <input
+              placeholder="Church name *"
+              value={addForm.churchName}
+              onChange={(e) => setAddForm(f => ({ ...f, churchName: e.target.value }))}
+              disabled={addLoading}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 10, boxSizing: "border-box" }}
+            />
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <input
+                placeholder="City"
+                value={addForm.city}
+                onChange={(e) => setAddForm(f => ({ ...f, city: e.target.value }))}
+                disabled={addLoading}
+                style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 }}
+              />
+              <input
+                placeholder="State"
+                value={addForm.state}
+                onChange={(e) => setAddForm(f => ({ ...f, state: e.target.value }))}
+                disabled={addLoading}
+                style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+              <input
+                placeholder="Church email"
+                type="email"
+                value={addForm.churchEmail}
+                onChange={(e) => setAddForm(f => ({ ...f, churchEmail: e.target.value }))}
+                disabled={addLoading}
+                style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 }}
+              />
+              <input
+                placeholder="Church phone"
+                type="tel"
+                value={addForm.phone}
+                onChange={(e) => setAddForm(f => ({ ...f, phone: e.target.value }))}
+                disabled={addLoading}
+                style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 }}
+              />
+            </div>
+
+            {/* Owner account */}
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>Owner Account</p>
+
+            <input
+              placeholder="Owner email *"
+              type="email"
+              value={addForm.ownerEmail}
+              onChange={(e) => setAddForm(f => ({ ...f, ownerEmail: e.target.value }))}
+              disabled={addLoading}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 10, boxSizing: "border-box" }}
+            />
+            <input
+              placeholder="Temporary password * (min 8 chars)"
+              type="text"
+              value={addForm.ownerPassword}
+              onChange={(e) => setAddForm(f => ({ ...f, ownerPassword: e.target.value }))}
+              disabled={addLoading}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, marginBottom: 20, boxSizing: "border-box", fontFamily: "monospace" }}
+            />
+
+            {/* Subscription */}
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>Subscription</p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
+              {(["trial", "active"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setAddForm(f => ({ ...f, subscriptionStatus: s }))}
+                  disabled={addLoading}
+                  style={{
+                    flex: 1,
+                    padding: "10px",
+                    borderRadius: 10,
+                    border: "1px solid",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    borderColor: addForm.subscriptionStatus === s ? DARK_GREEN : "#d1d5db",
+                    backgroundColor: addForm.subscriptionStatus === s ? "#f0fdf4" : "white",
+                    color: addForm.subscriptionStatus === s ? "#14532d" : "#6b7280",
+                  }}
+                >
+                  {s === "trial" ? "⏳ Trial (30 days)" : "✅ Paid / Active"}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAddChurch(false)}
+                disabled={addLoading}
+                style={{ flex: 1, padding: 11, borderRadius: 12, border: "1px solid #e5e7eb", backgroundColor: "white", fontWeight: 500, fontSize: 14, color: "#374151", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createChurch}
+                disabled={addLoading}
+                style={{ flex: 2, padding: 11, borderRadius: 12, border: "none", backgroundColor: DARK_GREEN, color: "white", fontWeight: 700, fontSize: 14, cursor: addLoading ? "not-allowed" : "pointer", opacity: addLoading ? 0.7 : 1 }}
+              >
+                {addLoading ? "Creating…" : "Create Church →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Suspend Confirmation Modal */}
       {confirmSuspend && (
