@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -180,7 +180,6 @@ export default function AppShell(props: AppShellProps) {
   const { children } = props;
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [cmOpen, setCmOpen] = useState(false);
   const [msOpen, setMsOpen] = useState(false);
@@ -209,47 +208,46 @@ export default function AppShell(props: AppShellProps) {
     setMsOpen(MS_ITEMS.some(item => pathActive(pathname, item.href)));
     setShOpen(SH_ITEMS.some(item => pathActive(pathname, item.href)));
 
-    const selectedFromUrl = searchParams.get("churchId");
     const selectedFromStorage = readSelectedChurchFromStorage();
 
     // SECURITY/ACCURACY: only show the master-admin impersonation banner when
-    // the stored selected church matches the churchId currently being viewed.
-    // This prevents a stale browser value from saying "Viewing as Lighthouse"
-    // while the server-rendered dashboard is actually ABC Church.
-    if (
-      selectedFromStorage.id &&
-      selectedFromStorage.name &&
-      (!selectedFromUrl || selectedFromStorage.id === selectedFromUrl)
-    ) {
-      setImpersonatingChurch(selectedFromStorage.name);
-    } else {
-      setImpersonatingChurch(null);
-    }
+    // both the selected church id and selected church name are present. Do not
+    // use useSearchParams here because AppShell is shared by static dashboard
+    // pages and useSearchParams breaks production prerendering unless wrapped
+    // in Suspense.
+    setImpersonatingChurch(
+      selectedFromStorage.id && selectedFromStorage.name
+        ? selectedFromStorage.name
+        : null,
+    );
 
     setMounted(true);
-  }, [pathname, searchParams]);
+  }, [pathname]);
 
   useEffect(() => {
-    function handleStorageChange(event: StorageEvent) {
-      if (event.key !== "selected_church_id" && event.key !== "selected_church_name") return;
-
-      const selectedFromUrl = searchParams.get("churchId");
+    function refreshImpersonationBanner() {
       const selectedFromStorage = readSelectedChurchFromStorage();
 
-      if (
-        selectedFromStorage.id &&
-        selectedFromStorage.name &&
-        (!selectedFromUrl || selectedFromStorage.id === selectedFromUrl)
-      ) {
-        setImpersonatingChurch(selectedFromStorage.name);
-      } else {
-        setImpersonatingChurch(null);
-      }
+      setImpersonatingChurch(
+        selectedFromStorage.id && selectedFromStorage.name
+          ? selectedFromStorage.name
+          : null,
+      );
+    }
+
+    function handleStorageChange(event: StorageEvent) {
+      if (event.key !== "selected_church_id" && event.key !== "selected_church_name") return;
+      refreshImpersonationBanner();
     }
 
     window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [searchParams]);
+    window.addEventListener("focus", refreshImpersonationBanner);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", refreshImpersonationBanner);
+    };
+  }, []);
 
   function toggle(key: string) {
     setCollapsed(prev => {
