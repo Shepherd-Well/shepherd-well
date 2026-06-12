@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
+import { wrapClientForRoomsDebug } from '@/lib/debug-rooms';
 
 function slugify(text: string): string {
   return text
@@ -45,9 +46,12 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Church name is required' }, { status: 400 });
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  const supabaseAdmin = wrapClientForRoomsDebug(
+    createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    ),
+    'app/api/onboarding/create-church/route.ts supabaseAdmin',
   );
 
   // Get the authenticated user from the Authorization header

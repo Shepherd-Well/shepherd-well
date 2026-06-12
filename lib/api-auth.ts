@@ -1,11 +1,15 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient as createSSRClient } from '@/lib/supabase/server';
 import { type NextRequest } from 'next/server';
+import { wrapClientForRoomsDebug } from '@/lib/debug-rooms';
 
 export function adminClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  return wrapClientForRoomsDebug(
+    createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    ),
+    'lib/api-auth.ts adminClient()',
   );
 }
 

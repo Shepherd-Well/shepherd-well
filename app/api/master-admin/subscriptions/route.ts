@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
+import { wrapClientForRoomsDebug } from '@/lib/debug-rooms';
 
 function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  return wrapClientForRoomsDebug(
+    createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!),
+    'app/api/master-admin/subscriptions/route.ts adminClient()',
+  );
 }
 
 async function getAuthUser(req: NextRequest) {
@@ -213,23 +217,6 @@ export async function POST(req: NextRequest) {
     { church_id: church.id, name: "Volunteers",           description: "General church volunteers",                    color: "#65A30D", icon: "⭐" },
   ]);
   if (deptErr) console.error('[create-church] departments:', deptErr.message);
-
-  // 5. Default check-in rooms
-  const { error: roomsErr } = await admin.from('cm_checkin_rooms').insert([
-    { church_id: church.id, name: "Nursery",        min_age: 0,  max_age: 1,  is_active: true },
-    { church_id: church.id, name: "Toddlers",       min_age: 2,  max_age: 3,  is_active: true },
-    { church_id: church.id, name: "Pre-K",          min_age: 4,  max_age: 5,  is_active: true },
-    { church_id: church.id, name: "K–2nd Grade",    min_age: 5,  max_age: 8,  is_active: true },
-    { church_id: church.id, name: "3rd–5th Grade",  min_age: 8,  max_age: 11, is_active: true },
-  ]);
-  if (roomsErr) console.error('[create-church] rooms:', roomsErr.message);
-
-  // 6. Default service templates
-  const { error: templatesErr } = await admin.from('cm_service_templates').insert([
-    { church_id: church.id, name: "Sunday Morning Service", typical_day: "Sunday",    typical_time: "10:00:00", is_active: true },
-    { church_id: church.id, name: "Wednesday Night",        typical_day: "Wednesday", typical_time: "19:00:00", is_active: true },
-  ]);
-  if (templatesErr) console.error('[create-church] templates:', templatesErr.message);
 
   return Response.json({ church });
 }

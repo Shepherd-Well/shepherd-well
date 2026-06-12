@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
   const { name, minAge, maxAge, capacity } = await request.json();
   if (!name) return Response.json({ error: 'name required' }, { status: 400 });
 
+  console.error('[DEBUG] app/api/checkin/rooms/route.ts POST — explicit single-room insert\n  name:', name, '\n  churchId:', auth.churchId, '\n  stack:', new Error().stack);
+
   const { data, error } = await adminClient()
     .from('cm_checkin_rooms')
     .insert({ church_id: auth.churchId, name, min_age: minAge ?? null, max_age: maxAge ?? null, capacity: capacity ?? null })
