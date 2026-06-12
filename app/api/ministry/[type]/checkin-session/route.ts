@@ -1,25 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-async function getAuth(request: NextRequest) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const admin = adminClient();
-  const { data: { user } } = await admin.auth.getUser(token);
-  if (!user) return null;
-  const { data } = await admin.from('church_users').select('church_id').eq('user_id', user.id).maybeSingle();
-  if (!data?.church_id) return null;
-  return { userId: user.id, churchId: data.church_id as string };
-}
+import { getAuthContext, adminClient } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const sessionId = request.nextUrl.searchParams.get('sessionId');
   const admin = adminClient();
@@ -29,14 +15,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .from('ministry_checkin_records')
       .select('id, member_id, visitor_name')
       .eq('session_id', sessionId)
-      .eq('church_id', auth.churchId);
+      .eq('church_id', churchId);
     return Response.json({ records: records ?? [] });
   }
 
   const { data, error } = await admin
     .from('ministry_checkin_sessions')
     .select('*')
-    .eq('church_id', auth.churchId)
+    .eq('church_id', churchId)
     .eq('ministry_type', type)
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
@@ -48,15 +34,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const { serviceName, date } = await request.json();
   if (!serviceName || !date) return Response.json({ error: 'serviceName and date required' }, { status: 400 });
 
   const { data, error } = await adminClient()
     .from('ministry_checkin_sessions')
-    .insert({ church_id: auth.churchId, ministry_type: type, service_name: serviceName, date, status: 'open' })
+    .insert({ church_id: churchId, ministry_type: type, service_name: serviceName, date, status: 'open' })
     .select('*')
     .single();
 
@@ -66,8 +53,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const { id, status, autoFollowup } = await request.json();
   if (!id) return Response.json({ error: 'id required' }, { status: 400 });
@@ -81,7 +69,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .from('ministry_checkin_sessions')
     .update(updates)
     .eq('id', id)
-    .eq('church_id', auth.churchId)
+    .eq('church_id', churchId)
     .eq('ministry_type', type)
     .select('*')
     .single();

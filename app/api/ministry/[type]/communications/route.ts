@@ -1,27 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
 import { Resend } from 'resend';
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-async function getAuthUser(req: NextRequest) {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const { data: { user } } = await adminClient().auth.getUser(token);
-  return user ?? null;
-}
-async function getChurchId(userId: string) {
-  const { data } = await adminClient().from('church_users').select('church_id').eq('user_id', userId).maybeSingle();
-  return data?.church_id ?? null;
-}
+import { getAuthContext, adminClient } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const user = await getAuthUser(req);
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  const churchId = await getChurchId(user.id);
-  if (!churchId) return Response.json({ error: 'No church found' }, { status: 403 });
+  const ctx = await getAuthContext(req);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId, userId } = ctx;
 
   const { data, error } = await adminClient()
     .from('ministry_communications')
@@ -49,10 +34,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ type
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const user = await getAuthUser(req);
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  const churchId = await getChurchId(user.id);
-  if (!churchId) return Response.json({ error: 'No church found' }, { status: 403 });
+  const ctx = await getAuthContext(req);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId, userId } = ctx;
 
   const { title, body, send_email } = await req.json();
   if (!title?.trim()) return Response.json({ error: 'Title required' }, { status: 400 });
@@ -90,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ typ
         const resend = new Resend(process.env.RESEND_API_KEY);
 
         // Get sender email for the "to" field (required by Resend)
-        const { data: { user: authUser } } = await admin.auth.admin.getUserById(user.id);
+        const { data: { user: authUser } } = await admin.auth.admin.getUserById(userId);
         const senderEmail = authUser?.email ?? 'onboarding@resend.dev';
 
         const htmlBody = body.trim().split('\n').map((line: string) =>
@@ -127,12 +111,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ typ
     ministry_type: type,
     title: title.trim(),
     body: body.trim(),
-    sent_by: user.id,
+    sent_by: userId,
     sent_at: new Date().toISOString(),
     email_sent: emailSent,
     recipient_count: recipientCount,
   }).select('*').single();
 
   if (error) return Response.json({ error: error.message }, { status: 400 });
-  return Response.json({ communication: { ...record, sent_by_name: user.email ?? 'Staff' } });
+  return Response.json({ communication: { ...record, sent_by_name: 'Staff' } });
 }

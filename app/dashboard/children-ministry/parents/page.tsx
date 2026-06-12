@@ -45,9 +45,15 @@ export default function ParentsPage() {
       }
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
+      const selectedChurchId = localStorage.getItem("selected_church_id");
+      console.log("[Parents] init: selectedChurchId from localStorage:", selectedChurchId ?? "(none — will use logged-in church)");
       const res = await fetch("/api/children-ministry/parents", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          ...(selectedChurchId ? { "x-selected-church-id": selectedChurchId } : {}),
+        },
       });
+      console.log("[Parents] fetch x-selected-church-id sent:", selectedChurchId ?? "(not sent)");
       if (res.ok) { const d = await res.json(); setParents(d.parents ?? []); }
       setLoading(false);
     }

@@ -58,7 +58,15 @@ export default function ChildrenPage() {
   const [saving, setSaving] = useState(false);
 
   async function load(t: string) {
-    const res = await fetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } });
+    const selectedChurchId = localStorage.getItem("selected_church_id");
+    console.log("[Children] load: selectedChurchId from localStorage:", selectedChurchId ?? "(none — will use logged-in church)");
+    const res = await fetch("/api/children-ministry/children", {
+      headers: {
+        Authorization: `Bearer ${t}`,
+        ...(selectedChurchId ? { "x-selected-church-id": selectedChurchId } : {}),
+      },
+    });
+    console.log("[Children] fetch x-selected-church-id sent:", selectedChurchId ?? "(not sent)");
     const data = await res.json();
     setChildren(data.children ?? []);
   }

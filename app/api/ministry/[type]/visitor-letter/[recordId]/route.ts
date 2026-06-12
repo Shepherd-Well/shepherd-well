@@ -1,28 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-async function getAuth(request: NextRequest) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const admin = adminClient();
-  const { data: { user } } = await admin.auth.getUser(token);
-  if (!user) return null;
-  const { data } = await admin.from('church_users').select('church_id').eq('user_id', user.id).maybeSingle();
-  if (!data?.church_id) return null;
-  return { userId: user.id, churchId: data.church_id as string };
-}
+import { getAuthContext, adminClient } from '@/lib/api-auth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ type: string; recordId: string }> }
 ) {
   const { type, recordId } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const admin = adminClient();
 
@@ -34,7 +20,7 @@ export async function GET(
       .from('cm_visitor_families')
       .select('parent1_first_name, parent1_last_name, parent1_email, parent1_phone, visit_date')
       .eq('id', recordId)
-      .eq('church_id', auth.churchId)
+      .eq('church_id', churchId)
       .maybeSingle();
 
     if (family) {
@@ -44,7 +30,7 @@ export async function GET(
         .from('cm_visitor_children')
         .select('family_id')
         .eq('id', recordId)
-        .eq('church_id', auth.churchId)
+        .eq('church_id', churchId)
         .maybeSingle();
 
       if (child?.family_id) {
@@ -61,7 +47,7 @@ export async function GET(
 
     const [logRes, churchRes] = await Promise.all([
       admin.from('ministry_followup_log').select('personalized_message').eq('record_id', recordId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      admin.from('churches').select('name').eq('id', auth.churchId).maybeSingle(),
+      admin.from('churches').select('name').eq('id', churchId).maybeSingle(),
     ]);
 
     return Response.json({
@@ -82,7 +68,7 @@ export async function GET(
     .from('ministry_checkin_records')
     .select('*')
     .eq('id', recordId)
-    .eq('church_id', auth.churchId)
+    .eq('church_id', churchId)
     .maybeSingle();
 
   if (!record) return Response.json({ error: 'Record not found' }, { status: 404 });
@@ -104,7 +90,7 @@ export async function GET(
   const { data: church } = await admin
     .from('churches')
     .select('name')
-    .eq('id', auth.churchId)
+    .eq('id', churchId)
     .maybeSingle();
 
   const ministryMap: Record<string, string> = { childrens: "Children's Ministry", 'middle-school': "Middle School Ministry", 'high-school': "High School Ministry", 'young-adults': "Young Adults Ministry", mens: "Men's Ministry", womens: "Women's Ministry", seniors: "Senior Ministry", ushers: "Ushers Ministry", drama: "Drama Ministry", 'music-choir': "Music & Choir Ministry" };

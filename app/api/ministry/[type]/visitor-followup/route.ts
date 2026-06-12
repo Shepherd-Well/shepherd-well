@@ -1,21 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
 import { Resend } from 'resend';
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-async function getAuth(request: NextRequest) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const admin = adminClient();
-  const { data: { user } } = await admin.auth.getUser(token);
-  if (!user) return null;
-  const { data } = await admin.from('church_users').select('church_id').eq('user_id', user.id).maybeSingle();
-  if (!data?.church_id) return null;
-  return { userId: user.id, churchId: data.church_id as string };
-}
+import { getAuthContext, adminClient } from '@/lib/api-auth';
 
 function buildEmailHtml(churchName: string, ministryName: string, visitorName: string, customMsg?: string | null): string {
   const firstName = visitorName.split(' ')[0] || visitorName;
@@ -43,8 +28,9 @@ function buildEmailHtml(churchName: string, ministryName: string, visitorName: s
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const { sessionId, recordId, visitorName, visitorEmail, visitorPhone, followUpType, personalizedMessage } =
     await request.json() as {
@@ -61,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const sendEmail = !isSkip && (followUpType === 'email' || followUpType === 'both') && !!visitorEmail?.trim();
 
   if (sendEmail) {
-    const { data: church } = await admin.from('churches').select('name').eq('id', auth.churchId).maybeSingle();
+    const { data: church } = await admin.from('churches').select('name').eq('id', churchId).maybeSingle();
     const churchName = church?.name ?? 'Our Church';
     const ministryMap: Record<string, string> = { childrens: "Children's Ministry", 'middle-school': "Middle School Ministry", 'high-school': "High School Ministry", 'young-adults': "Young Adults Ministry", mens: "Men's Ministry", womens: "Women's Ministry", seniors: "Senior Ministry", ushers: "Ushers Ministry", drama: "Drama Ministry", 'music-choir': "Music & Choir Ministry" };
     const ministryName = ministryMap[type] ?? `${type.charAt(0).toUpperCase() + type.slice(1)} Ministry`;
@@ -81,7 +67,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const now = new Date().toISOString();
   await admin.from('ministry_visitor_followup_log').insert({
-    church_id: auth.churchId,
+    church_id: churchId,
     session_id: sessionId,
     record_id: recordId,
     visitor_name: visitorName ?? null,

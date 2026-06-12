@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +41,9 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
   const { type } = use(params);
   const router = useRouter();
   const cfg = MINISTRY_CONFIG[type];
+
+  const selectedChurchIdRef = useRef<string | null>(null);
+  const ch = (): Record<string, string> => selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
 
   // ── Existing state ──
   const [loading, setLoading] = useState(true);
@@ -96,7 +99,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
 
   // ── Existing load ──
   async function load(t: string) {
-    const res = await fetch(`/api/ministry/${type}/attendance?sessions=8`, { headers: { Authorization: `Bearer ${t}` } });
+    const res = await fetch(`/api/ministry/${type}/attendance?sessions=8`, { headers: { Authorization: `Bearer ${t}`, ...ch() } });
     const data = await res.json();
     setMembers(data.members ?? []);
     setSessions(data.sessions ?? []);
@@ -113,6 +116,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       const t = session.access_token;
+      selectedChurchIdRef.current = localStorage.getItem("selected_church_id");
       setToken(t);
       await load(t);
       setLoading(false);
@@ -136,7 +140,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     setToggling(key);
     const res = await fetch(`/api/ministry/${type}/attendance`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ member_id: memberId, session_date: date, present: !current }),
     });
     if (res.ok) await load(token);
@@ -149,7 +153,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     await Promise.all(members.map(m =>
       fetch(`/api/ministry/${type}/attendance`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
         body: JSON.stringify({ member_id: m.id, session_date: sessionDate, present: true }),
       })
     ));
@@ -178,7 +182,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     setStartingSession(true);
     const res = await fetch(`/api/ministry/${type}/checkin-session`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ serviceName: cfg?.name ?? type, date: sessionDate }),
     });
     if (res.ok) {
@@ -194,7 +198,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     setTogglingCheckin(memberId);
     const res = await fetch(`/api/ministry/${type}/checkin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ sessionId: checkinSession.id, memberId }),
     });
     if (res.ok) {
@@ -213,7 +217,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     setSavingWalkIn(true);
     const res = await fetch(`/api/ministry/${type}/checkin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ sessionId: checkinSession.id, visitorName: walkInForm.name, visitorPhone: walkInForm.phone || null, visitorEmail: walkInForm.email || null }),
     });
     if (res.ok) {
@@ -229,7 +233,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
   // ── New: visitors tab functions ──
   async function loadVisitors(t: string) {
     setNvLoading(true);
-    const res = await fetch(`/api/ministry/${type}/new-visitors`, { headers: { Authorization: `Bearer ${t}` } });
+    const res = await fetch(`/api/ministry/${type}/new-visitors`, { headers: { Authorization: `Bearer ${t}`, ...ch() } });
     if (res.ok) { const d = await res.json(); setNvSessions(d ?? []); }
     setNvLoading(false);
   }
@@ -238,7 +242,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     if (!token) return;
     await fetch(`/api/ministry/${type}/checkin-session`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ id: sessionId, autoFollowup: !current }),
     });
     setNvSessions(ss => ss.map(s => s.session.id === sessionId ? { ...s, session: { ...s.session, auto_followup: !current } } : s));
@@ -255,7 +259,7 @@ export default function AttendancePage({ params }: { params: Promise<{ type: str
     setNvSending(s => ({ ...s, [key]: followType }));
     await fetch(`/api/ministry/${type}/visitor-followup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...ch() },
       body: JSON.stringify({ sessionId, recordId: visitor.id, visitorName: `${visitor.first_name} ${visitor.last_name}`, visitorEmail: email || null, visitorPhone: visitor.phone || null, followUpType: followType, personalizedMessage: nvPersonalize[key] || null }),
     });
     setNvSending(s => { const n = { ...s }; delete n[key]; return n; });

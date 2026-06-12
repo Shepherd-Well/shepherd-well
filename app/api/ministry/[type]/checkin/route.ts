@@ -1,25 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-async function getAuth(request: NextRequest) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const admin = adminClient();
-  const { data: { user } } = await admin.auth.getUser(token);
-  if (!user) return null;
-  const { data } = await admin.from('church_users').select('church_id').eq('user_id', user.id).maybeSingle();
-  if (!data?.church_id) return null;
-  return { userId: user.id, churchId: data.church_id as string };
-}
+import { getAuthContext, adminClient } from '@/lib/api-auth';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const { sessionId, memberId, visitorName, visitorPhone, visitorEmail } = await request.json();
   if (!sessionId) return Response.json({ error: 'sessionId required' }, { status: 400 });
@@ -31,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .from('ministry_checkin_sessions')
     .select('id')
     .eq('id', sessionId)
-    .eq('church_id', auth.churchId)
+    .eq('church_id', churchId)
     .eq('ministry_type', type)
     .maybeSingle();
   if (!session) return Response.json({ error: 'Session not found' }, { status: 404 });
@@ -62,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .from('ministry_checkin_records')
       .insert({
         session_id: sessionId,
-        church_id: auth.churchId,
+        church_id: churchId,
         ministry_type: type,
         member_id: memberId,
         visitor_name: memberName,
@@ -87,7 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { data: priorSessions } = await admin
       .from('ministry_checkin_records')
       .select('session_id')
-      .eq('church_id', auth.churchId)
+      .eq('church_id', churchId)
       .eq('ministry_type', type)
       .eq('visitor_phone', normalizedPhone);
     distinctPrior = new Set((priorSessions ?? []).map((r: any) => r.session_id as string)).size;
@@ -100,7 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .from('ministry_checkin_records')
     .insert({
       session_id: sessionId,
-      church_id: auth.churchId,
+      church_id: churchId,
       ministry_type: type,
       member_id: null,
       visitor_name: visitorName.trim(),

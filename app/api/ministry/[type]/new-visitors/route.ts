@@ -1,25 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
 import { type NextRequest } from 'next/server';
-
-function adminClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
-
-async function getAuth(request: NextRequest) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  const admin = adminClient();
-  const { data: { user } } = await admin.auth.getUser(token);
-  if (!user) return null;
-  const { data } = await admin.from('church_users').select('church_id').eq('user_id', user.id).maybeSingle();
-  if (!data?.church_id) return null;
-  return { userId: user.id, churchId: data.church_id as string };
-}
+import { getAuthContext, adminClient } from '@/lib/api-auth';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const auth = await getAuth(request);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getAuthContext(request);
+  if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const { churchId } = ctx;
 
   const admin = adminClient();
 
@@ -28,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { data: children, error } = await admin
       .from('cm_visitor_children')
       .select('id, first_name, last_name, date_of_birth, family_id')
-      .eq('church_id', auth.churchId)
+      .eq('church_id', churchId)
       .order('created_at', { ascending: false });
 
     if (error) return Response.json({ error: error.message }, { status: 400 });
@@ -39,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ? await admin
           .from('cm_visitor_families')
           .select('id, parent1_first_name, parent1_last_name, parent1_phone, parent1_email, visit_date, status')
-          .eq('church_id', auth.churchId)
+          .eq('church_id', churchId)
           .in('id', familyIds)
       : { data: [] };
 
@@ -68,7 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: visitors, error } = await admin
     .from('ministry_visitors')
     .select('id, first_name, last_name, email, phone, visit_count, first_visit_date, last_visit_date, status, notes')
-    .eq('church_id', auth.churchId)
+    .eq('church_id', churchId)
     .eq('ministry_type', type)
     .eq('promoted_to_member', false)
     .order('last_visit_date', { ascending: false });
