@@ -137,7 +137,7 @@ export default function CheckinSetupPage() {
     ]);
     if (rRes.ok) { const d = await rRes.json(); setRooms(d.rooms ?? []); }
     if (tRes.ok) { const d = await tRes.json(); setTemplates(d.templates ?? []); }
-    if (sRes.ok) { const d = await sRes.json(); setSessions(d.sessions ?? []); if (!selectedChurchIdRef.current && d.sessions?.length > 0) { selectedChurchIdRef.current = d.sessions[0].church_id; } }
+    if (sRes.ok) { const d = await sRes.json(); setSessions(d.sessions ?? []); }
   }
 
   useEffect(() => {
@@ -147,14 +147,26 @@ export default function CheckinSetupPage() {
         console.log("Dashboard client user unavailable:", error?.message ?? null);
         return;
       }
-      const churchRes = await fetch('/api/auth/church', {
-        credentials: 'include',
-        headers: ch(),
-      });
-      if (churchRes.ok) {
-        const churchData = await churchRes.json();
-        selectedChurchIdRef.current = churchData.churchId;
+      // MASTER ADMIN: honor selected church from localStorage first.
+      // This prevents the page from reverting back to the logged-in user's default church.
+      const storedChurchId =
+        typeof window !== "undefined"
+          ? localStorage.getItem("selected_church_id")
+          : null;
+
+      if (storedChurchId) {
+        selectedChurchIdRef.current = storedChurchId;
+      } else {
+        const churchRes = await fetch("/api/auth/church", {
+          credentials: "include",
+        });
+
+        if (churchRes.ok) {
+          const churchData = await churchRes.json();
+          selectedChurchIdRef.current = churchData.churchId;
+        }
       }
+
       await load();
       setLoading(false);
     }
