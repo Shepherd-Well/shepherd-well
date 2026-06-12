@@ -107,6 +107,22 @@ export default function DashboardClient({
       .catch(() => {});
   }, [isPlatformAdmin, churchId]);
 
+  // Sync impersonation church to localStorage so all child pages pick up the correct
+  // church_id. Must run on every prop change so a page refresh or direct URL navigation
+  // does not silently revert child pages to the logged-in user's default church.
+  useEffect(() => {
+    if (!isPlatformAdmin) return;
+    if (churchId) {
+      console.log("[MasterAdmin] selected_church_id → localStorage:", { churchId, churchName });
+      localStorage.setItem("selected_church_id", churchId);
+      localStorage.setItem("selected_church_name", churchName ?? "");
+    } else {
+      console.log("[MasterAdmin] selected_church_id cleared from localStorage (church selector view)");
+      localStorage.removeItem("selected_church_id");
+      localStorage.removeItem("selected_church_name");
+    }
+  }, [isPlatformAdmin, churchId, churchName]);
+
   useEffect(() => {
     if (!churchId) return;
 

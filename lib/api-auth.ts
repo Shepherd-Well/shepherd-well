@@ -53,6 +53,8 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext 
 
   // 3. Platform admin church override via x-selected-church-id header
   const selectedChurchId = request.headers.get('x-selected-church-id');
+  console.log('[getAuthContext] userId:', userId, 'x-selected-church-id:', selectedChurchId ?? '(none)');
+
   if (selectedChurchId) {
     // Check platform_admins table
     const { data: adminRow } = await admin
@@ -71,14 +73,20 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext 
       ownerEmails.length > 0 &&
       ownerEmails.includes(userEmail.toLowerCase());
 
-    if (adminRow || isOwnerEmail) {
+    const isPlatformAdmin = !!(adminRow || isOwnerEmail);
+    console.log('[getAuthContext] platform admin check:', { adminRow: !!adminRow, isOwnerEmail, isPlatformAdmin });
+
+    if (isPlatformAdmin) {
       const { data: church } = await admin
         .from('churches')
         .select('id')
         .eq('id', selectedChurchId)
         .maybeSingle();
 
+      console.log('[getAuthContext] impersonation church lookup:', { selectedChurchId, found: !!church });
+
       if (church) {
+        console.log('[getAuthContext] → resolved churchId (impersonation):', selectedChurchId);
         return { userId, churchId: selectedChurchId };
       }
     }
@@ -91,6 +99,7 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContext 
     .eq('user_id', userId)
     .maybeSingle();
 
+  console.log('[getAuthContext] → resolved churchId (church_users):', data?.church_id ?? 'null');
   if (!data?.church_id) return null;
   return { userId, churchId: data.church_id as string };
 }

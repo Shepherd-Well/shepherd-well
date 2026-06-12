@@ -156,6 +156,7 @@ export default function CheckinSetupPage() {
 
       if (storedChurchId) {
         selectedChurchIdRef.current = storedChurchId;
+        console.log("[CheckinSetup] init: selectedChurchId from localStorage:", storedChurchId);
       } else {
         const churchRes = await fetch("/api/auth/church", {
           credentials: "include",
@@ -164,9 +165,11 @@ export default function CheckinSetupPage() {
         if (churchRes.ok) {
           const churchData = await churchRes.json();
           selectedChurchIdRef.current = churchData.churchId;
+          console.log("[CheckinSetup] init: selectedChurchId from /api/auth/church:", churchData.churchId);
         }
       }
 
+      console.log("[CheckinSetup] fetch headers:", ch());
       await load();
       setLoading(false);
     }

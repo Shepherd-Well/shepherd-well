@@ -77,7 +77,11 @@ export default function VisitorsPage() {
         return;
       }
       const urlParams = new URLSearchParams(window.location.search);
-      selectedChurchIdRef.current = urlParams.get("churchId") ?? localStorage.getItem("selected_church_id");
+      const urlChurchId = urlParams.get("churchId");
+      const lsChurchId = localStorage.getItem("selected_church_id");
+      selectedChurchIdRef.current = urlChurchId ?? lsChurchId;
+      console.log("[Visitors] init: urlChurchId:", urlChurchId, "lsChurchId:", lsChurchId, "resolved:", selectedChurchIdRef.current);
+      console.log("[Visitors] fetch headers:", ch());
       await load();
       setLoading(false);
     }
