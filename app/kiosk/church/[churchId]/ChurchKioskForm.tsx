@@ -4,10 +4,17 @@ import React, { useState } from "react";
 
 type Session = { id: string; service_name: string; date: string; session_group: string | null };
 type Group = { name: string; sessions: Session[] };
-type Room = { id: string; name: string };
+type Room = { id: string; name: string; min_age?: number | null; max_age?: number | null };
 type DisplayGroup = { name: string; sessions: Session[]; isNamed: boolean };
 
-type Step = "pick-group" | "pick-sessions" | "welcome" | "parent" | "children" | "review" | "success";
+type Step =
+  | "pick-group"
+  | "pick-sessions"
+  | "welcome"
+  | "parent"
+  | "children"
+  | "attendance"
+  | "success";
 
 type ChildForm = {
   childId?: string;
@@ -15,10 +22,22 @@ type ChildForm = {
   lastName: string;
   dateOfBirth: string;
   roomId: string;
+  selected: boolean;
   allergies: string[];
   allergyOther: string;
+  medicalNotes: string;
   specialInstructions: string;
-  authorizedPickups: string;
+};
+
+type LookupChild = {
+  id?: string;
+  name: string;
+  dateOfBirth: string | null;
+  roomId?: string | null;
+  allergies?: string | string[] | null;
+  allergyOther?: string | null;
+  medicalNotes?: string | null;
+  specialInstructions?: string | null;
 };
 
 type ImmediateLabel = {
@@ -32,6 +51,7 @@ type ImmediateLabel = {
   medicalNotes: string | null;
   specialInstructions: string | null;
   visitNumber: number | null;
+  authorizedPickups?: string | null;
 };
 
 type Props = {
@@ -64,6 +84,7 @@ const ALLERGY_OPTIONS = [
 
 const inputCls =
   "w-full text-xl px-5 py-4 rounded-2xl bg-white/10 border border-green-800 text-white placeholder-green-700 focus:outline-none focus:border-green-400";
+
 const labelCls = "block text-green-400 text-xs font-bold uppercase tracking-widest mb-2";
 
 function emptyChild(): ChildForm {
@@ -72,17 +93,131 @@ function emptyChild(): ChildForm {
     lastName: "",
     dateOfBirth: "",
     roomId: "",
+    selected: true,
     allergies: [],
     allergyOther: "",
+    medicalNotes: "",
     specialInstructions: "",
-    authorizedPickups: "",
   };
+}
+
+function fmtDate(d: string) {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ageFromDob(dob: string): number | null {
+  if (!dob) return null;
+
+  const [year, month, day] = dob.split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+
+  const birthdayThisYear = new Date(today.getFullYear(), month - 1, day);
+  if (today < birthdayThisYear) age--;
+
+  return age >= 0 ? age : null;
+}
+
+function autoAssignRoom(dob: string, rooms: Room[]): string {
+  const age = ageFromDob(dob);
+  if (age === null) return "";
+
+  const candidates = rooms.filter((room) => {
+    const minOk = room.min_age == null || age >= room.min_age;
+    const maxOk = room.max_age == null || age <= room.max_age;
+    return minOk && maxOk;
+  });
+
+  if (!candidates.length) return "";
+
+  candidates.sort((a, b) => {
+    const rangeA = (a.max_age ?? 999) - (a.min_age ?? 0);
+    const rangeB = (b.max_age ?? 999) - (b.min_age ?? 0);
+
+    if (rangeA !== rangeB) return rangeA - rangeB;
+    return a.name.localeCompare(b.name);
+  });
+
+  return candidates[0].id;
+}
+
+function parseName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function parseAllergies(raw: LookupChild["allergies"]) {
+  if (!raw) return { allergies: [] as string[], allergyOther: "" };
+
+  if (Array.isArray(raw)) {
+    let allergyOther = "";
+    const allergies = raw.map((item) => {
+      if (typeof item === "string" && item.startsWith("Other: ")) {
+        allergyOther = item.slice(7);
+        return "Other";
+      }
+      return item;
+    });
+    return { allergies, allergyOther };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      let allergyOther = "";
+      const allergies = parsed.map((item) => {
+        if (typeof item === "string" && item.startsWith("Other: ")) {
+          allergyOther = item.slice(7);
+          return "Other";
+        }
+        return item;
+      });
+      return { allergies, allergyOther };
+    }
+  } catch {
+    // Fall through to comma parsing.
+  }
+
+  return {
+    allergies: raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    allergyOther: "",
+  };
+}
+
+function allergyPayload(child: ChildForm): string[] {
+  return child.allergies.map((item) => {
+    if (item === "Other" && child.allergyOther.trim()) {
+      return `Other: ${child.allergyOther.trim()}`;
+    }
+    return item;
+  });
+}
+
+function roomName(roomId: string, rooms: Room[]) {
+  return rooms.find((room) => room.id === roomId)?.name ?? null;
 }
 
 export default function ChurchKioskForm({ churchId, churchName, groups, ungrouped, rooms }: Props) {
   const displayGroups: DisplayGroup[] = [
-    ...groups.map((g) => ({ ...g, isNamed: true })),
-    ...ungrouped.map((s) => ({ name: s.service_name, sessions: [s], isNamed: false })),
+    ...groups.map((group) => ({ ...group, isNamed: true })),
+    ...ungrouped.map((session) => ({
+      name: session.service_name,
+      sessions: [session],
+      isNamed: false,
+    })),
   ];
 
   function initialStep(): Step {
@@ -90,11 +225,16 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
     if (displayGroups.length === 1) return "pick-sessions";
     return "pick-group";
   }
+
   function initialGroupIdx(): number {
     return displayGroups.length === 1 ? 0 : -1;
   }
+
   function initialSessionIds(): Set<string> {
-    if (displayGroups.length === 1) return new Set(displayGroups[0].sessions.map((s) => s.id));
+    if (displayGroups.length === 1) {
+      return new Set(displayGroups[0].sessions.map((session) => session.id));
+    }
+
     return new Set<string>();
   }
 
@@ -107,6 +247,8 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
   const [parentLastName, setParentLastName] = useState("");
   const [parentPhone, setParentPhone] = useState("");
   const [parentEmail, setParentEmail] = useState("");
+  const [authorizedPickups, setAuthorizedPickups] = useState("");
+
   const [returning, setReturning] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
 
@@ -119,20 +261,24 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
   const [labels, setLabels] = useState<ImmediateLabel[]>([]);
 
   const currentGroup = selectedGroupIdx >= 0 ? displayGroups[selectedGroupIdx] : null;
-  const roomMap = Object.fromEntries(rooms.map((r) => [r.id, r.name]));
 
   function selectGroup(idx: number) {
-    const g = displayGroups[idx];
+    const group = displayGroups[idx];
     setSelectedGroupIdx(idx);
-    setSelectedSessionIds(new Set(g.sessions.map((s) => s.id)));
-    setStep(g.sessions.length > 1 ? "pick-sessions" : "welcome");
+    setSelectedSessionIds(new Set(group.sessions.map((session) => session.id)));
+    setStep(group.sessions.length > 1 ? "pick-sessions" : "welcome");
   }
 
   function toggleSession(id: string) {
     setSelectedSessionIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
       return next;
     });
   }
@@ -140,50 +286,100 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
   async function handleGetStarted() {
     const digits = welcomePhone.replace(/\D/g, "");
     if (digits.length < 7) return;
+
     setLookingUp(true);
+    setSubmitError("");
+
     try {
       const res = await fetch(`/api/kiosk/church/${churchId}/lookup?phone=${digits}`);
+
       if (res.ok) {
         const data = await res.json();
-        if (data.found && data.children?.length > 0) {
+
+        if (data.found) {
+          const loadedChildren = Array.isArray(data.children) ? (data.children as LookupChild[]) : [];
+
           setReturning(true);
           setParentFirstName(data.parentFirstName ?? "");
           setParentLastName(data.parentLastName ?? "");
           setParentPhone(data.parentPhone ?? welcomePhone);
+          setParentEmail(data.parentEmail ?? "");
+          setAuthorizedPickups(data.authorizedPickups ?? data.parentAuthorizedPickups ?? "");
+
           setChildren(
-            (data.children as { id?: string; name: string; dateOfBirth: string | null }[]).map((c) => {
-              const parts = c.name.trim().split(/\s+/);
-              return {
-                ...emptyChild(),
-                childId: c.id,
-                firstName: parts[0] ?? "",
-                lastName: parts.slice(1).join(" "),
-                dateOfBirth: c.dateOfBirth ?? "",
-              };
-            }),
+            loadedChildren.length > 0
+              ? loadedChildren.map((child) => {
+                  const parsed = parseName(child.name);
+                  const parsedAllergies = parseAllergies(child.allergies);
+                  const dob = child.dateOfBirth ?? "";
+                  const resolvedRoomId = child.roomId ?? autoAssignRoom(dob, rooms);
+
+                  return {
+                    childId: child.id,
+                    firstName: parsed.firstName,
+                    lastName: parsed.lastName,
+                    dateOfBirth: dob,
+                    roomId: resolvedRoomId,
+                    selected: true,
+                    allergies: parsedAllergies.allergies,
+                    allergyOther: child.allergyOther ?? parsedAllergies.allergyOther,
+                    medicalNotes: child.medicalNotes ?? "",
+                    specialInstructions: child.specialInstructions ?? "",
+                  };
+                })
+              : [emptyChild()],
           );
+
           setLookingUp(false);
-          setStep("children");
+
+          if (loadedChildren.length > 0) {
+            setStep("attendance");
+          } else {
+            setStep("children");
+          }
+
           return;
         }
       }
     } catch {
-      // lookup failure is non-blocking
+      // Lookup failure should not block new family registration.
     }
+
     setReturning(false);
     setParentPhone(welcomePhone);
+    setParentEmail("");
+    setAuthorizedPickups("");
+    setChildren([emptyChild()]);
     setLookingUp(false);
     setStep("parent");
   }
 
   function handleParentContinue() {
-    if (!parentFirstName.trim() || !parentLastName.trim() || parentPhone.replace(/\D/g, "").length < 7) return;
+    const phoneIsValid = parentPhone.replace(/\D/g, "").length >= 7;
+
+    if (!parentFirstName.trim() || !parentLastName.trim() || !phoneIsValid) return;
+
     setStep("children");
   }
 
   async function handleSubmit() {
+    const selectedChildren = children.filter(
+      (child) => child.selected && child.firstName.trim() && child.lastName.trim(),
+    );
+
+    if (selectedSessionIds.size === 0) {
+      setSubmitError("Please select at least one service.");
+      return;
+    }
+
+    if (selectedChildren.length === 0) {
+      setSubmitError("Please select at least one child attending today.");
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError("");
+
     try {
       const res = await fetch(`/api/kiosk/church/${churchId}/check-in`, {
         method: "POST",
@@ -193,38 +389,48 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
           parentLastName: parentLastName.trim(),
           parentPhone: parentPhone.trim(),
           parentEmail: parentEmail.trim() || undefined,
+          authorizedPickups: authorizedPickups.trim() || undefined,
           sessionIds: [...selectedSessionIds],
-          children: children.map((c) => ({
-            childId: c.childId || undefined,
-            firstName: c.firstName.trim(),
-            lastName: c.lastName.trim(),
-            dateOfBirth: c.dateOfBirth || undefined,
-            roomId: c.roomId || undefined,
-            allergies: c.allergies,
-            allergyOther: c.allergyOther || undefined,
-            specialInstructions: c.specialInstructions.trim() || undefined,
-            authorizedPickups: c.authorizedPickups.trim() || undefined,
+          children: selectedChildren.map((child) => ({
+            childId: child.childId || undefined,
+            firstName: child.firstName.trim(),
+            lastName: child.lastName.trim(),
+            dateOfBirth: child.dateOfBirth || undefined,
+            roomId: child.roomId || autoAssignRoom(child.dateOfBirth, rooms) || undefined,
+            allergies: allergyPayload(child),
+            allergyOther: child.allergyOther.trim() || undefined,
+            medicalNotes: child.medicalNotes.trim() || undefined,
+            specialInstructions: child.specialInstructions.trim() || undefined,
+            authorizedPickups: authorizedPickups.trim() || undefined,
           })),
         }),
       });
+
       const data = await res.json();
+
       if (!res.ok) {
         setSubmitError(data.error ?? "Check-in failed. Please try again.");
         setSubmitting(false);
         return;
       }
+
       setSecurityCode(data.securityCode);
       setLabels(data.labels ?? []);
       setResultChildren(
-        children.map((c) => ({
-          name: `${c.firstName.trim()} ${c.lastName.trim()}`,
-          room: c.roomId ? (roomMap[c.roomId] ?? null) : null,
-        })),
+        selectedChildren.map((child) => {
+          const resolvedRoomId = child.roomId || autoAssignRoom(child.dateOfBirth, rooms);
+
+          return {
+            name: `${child.firstName.trim()} ${child.lastName.trim()}`,
+            room: resolvedRoomId ? roomName(resolvedRoomId, rooms) : null,
+          };
+        }),
       );
       setStep("success");
     } catch {
       setSubmitError("Network error. Please try again.");
     }
+
     setSubmitting(false);
   }
 
@@ -237,12 +443,34 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
     setParentLastName("");
     setParentPhone("");
     setParentEmail("");
+    setAuthorizedPickups("");
     setReturning(false);
     setChildren([emptyChild()]);
     setSubmitError("");
     setSecurityCode(null);
     setResultChildren([]);
     setLabels([]);
+  }
+
+  function updateChild(index: number, updated: ChildForm) {
+    setChildren((current) => current.map((child, i) => (i === index ? updated : child)));
+  }
+
+  function removeChild(index: number) {
+    setChildren((current) => current.filter((_, i) => i !== index));
+  }
+
+  function addChild() {
+    setChildren((current) => [...current, emptyChild()]);
+  }
+
+  function serviceSummary() {
+    if (selectedSessionIds.size === 0) return "";
+    const sessions = displayGroups.flatMap((group) => group.sessions);
+    return sessions
+      .filter((session) => selectedSessionIds.has(session.id))
+      .map((session) => session.service_name)
+      .join(", ");
   }
 
   // ── pick-group ────────────────────────────────────────────────────────────
@@ -260,8 +488,9 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
             </h1>
             <p className="text-green-600 mt-2">Select your service</p>
           </div>
+
           <div className="space-y-4">
-            {displayGroups.map((g, idx) => (
+            {displayGroups.map((group, idx) => (
               <button
                 key={idx}
                 onClick={() => selectGroup(idx)}
@@ -269,13 +498,16 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                 style={{ backgroundColor: CARD, border: "2px solid #2d5a2d" }}
               >
                 <p className="font-bold text-white text-xl" style={{ fontFamily: "Georgia, serif" }}>
-                  {g.name}
+                  {group.name}
                 </p>
-                {g.sessions.length > 1 && (
+
+                {group.sessions.length > 1 && (
                   <p className="text-green-500 text-sm mt-1">
-                    {g.sessions.length} services · {g.sessions.map((s) => s.service_name).join(", ")}
+                    {group.sessions.length} services ·{" "}
+                    {group.sessions.map((session) => session.service_name).join(", ")}
                   </p>
                 )}
+
                 <p className="text-green-700 text-xs mt-2">Tap to select →</p>
               </button>
             ))}
@@ -302,13 +534,15 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
               All services are pre-selected. Uncheck any you&apos;re not attending.
             </p>
           </div>
+
           <div className="space-y-3 mb-8">
-            {currentGroup.sessions.map((s) => {
-              const checked = selectedSessionIds.has(s.id);
+            {currentGroup.sessions.map((session) => {
+              const checked = selectedSessionIds.has(session.id);
+
               return (
                 <button
-                  key={s.id}
-                  onClick={() => toggleSession(s.id)}
+                  key={session.id}
+                  onClick={() => toggleSession(session.id)}
                   className="w-full text-left rounded-2xl p-5 flex items-center gap-4 transition-all"
                   style={{
                     backgroundColor: checked ? "#1a4d1a" : CARD,
@@ -325,19 +559,27 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                   >
                     {checked ? "✓" : ""}
                   </div>
-                  <p className="font-semibold text-white text-lg">{s.service_name}</p>
+
+                  <p className="font-semibold text-white text-lg">{session.service_name}</p>
                 </button>
               );
             })}
           </div>
+
           <button
-            onClick={() => { if (selectedSessionIds.size > 0) setStep("welcome"); }}
+            onClick={() => {
+              if (selectedSessionIds.size > 0) setStep("welcome");
+            }}
             disabled={selectedSessionIds.size === 0}
             className="w-full py-4 rounded-2xl text-xl font-bold"
-            style={{ backgroundColor: selectedSessionIds.size > 0 ? GREEN : "#2d5a2d", color: BG }}
+            style={{
+              backgroundColor: selectedSessionIds.size > 0 ? GREEN : "#2d5a2d",
+              color: BG,
+            }}
           >
             Continue →
           </button>
+
           {displayGroups.length > 1 && (
             <button
               onClick={() => setStep("pick-group")}
@@ -355,16 +597,20 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
 
   if (step === "welcome") {
     const canStart = welcomePhone.replace(/\D/g, "").length >= 7;
+
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: BG }}>
         <div className="w-full max-w-lg text-center">
           <div className="text-6xl mb-6">⛪</div>
+
           <p className="text-green-400 text-sm font-semibold uppercase tracking-widest mb-3">
             {churchName || "Children's Ministry"}
           </p>
+
           <h1 className="text-4xl font-bold text-white mb-6" style={{ fontFamily: "Georgia, serif" }}>
             Welcome!
           </h1>
+
           <div
             className="rounded-3xl p-6 mb-8 text-left"
             style={{ backgroundColor: CARD, border: "1px solid #2d5a2d" }}
@@ -374,27 +620,38 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
               safety and will never sell or share it with third parties.
             </p>
           </div>
+
           <div className="mb-6 text-left">
             <label className={labelCls}>Phone Number</label>
             <input
               type="tel"
               value={welcomePhone}
               onChange={(e) => setWelcomePhone(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && canStart && !lookingUp) handleGetStarted(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && canStart && !lookingUp) handleGetStarted();
+              }}
               placeholder="(555) 555-5555"
               className={inputCls}
               autoComplete="tel"
               autoFocus
             />
           </div>
+
+          {submitError && <p className="text-red-400 text-sm text-center mb-4">{submitError}</p>}
+
           <button
             onClick={handleGetStarted}
             disabled={!canStart || lookingUp}
             className="w-full py-5 rounded-2xl text-xl font-bold transition-opacity"
-            style={{ backgroundColor: GREEN, color: BG, opacity: !canStart || lookingUp ? 0.5 : 1 }}
+            style={{
+              backgroundColor: GREEN,
+              color: BG,
+              opacity: !canStart || lookingUp ? 0.5 : 1,
+            }}
           >
             {lookingUp ? "Looking up…" : "Get Started →"}
           </button>
+
           {(displayGroups.length > 1 || (currentGroup && currentGroup.sessions.length > 1)) && (
             <button
               onClick={() =>
@@ -414,7 +671,10 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
 
   if (step === "parent") {
     const canContinue =
-      !!(parentFirstName.trim() && parentLastName.trim() && parentPhone.replace(/\D/g, "").length >= 7);
+      !!parentFirstName.trim() &&
+      !!parentLastName.trim() &&
+      parentPhone.replace(/\D/g, "").length >= 7;
+
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: BG }}>
         <div className="w-full max-w-lg">
@@ -422,10 +682,12 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
             <p className="text-green-400 text-sm font-semibold uppercase tracking-widest mb-2">
               {churchName || "Children's Ministry"}
             </p>
+
             <h1 className="text-3xl font-bold text-white" style={{ fontFamily: "Georgia, serif" }}>
               Parent Information
             </h1>
           </div>
+
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -440,6 +702,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                   autoComplete="given-name"
                 />
               </div>
+
               <div>
                 <label className={labelCls}>Last Name *</label>
                 <input
@@ -452,18 +715,22 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                 />
               </div>
             </div>
+
             <div>
               <label className={labelCls}>Phone Number *</label>
               <input
                 type="tel"
                 value={parentPhone}
                 onChange={(e) => setParentPhone(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && canContinue) handleParentContinue(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canContinue) handleParentContinue();
+                }}
                 placeholder="(555) 555-5555"
                 className={inputCls}
                 autoComplete="tel"
               />
             </div>
+
             <div>
               <label className={labelCls}>Email (optional)</label>
               <input
@@ -475,7 +742,22 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                 autoComplete="email"
               />
             </div>
+
+            <div>
+              <label className={labelCls}>Authorized Pickups (optional)</label>
+              <input
+                type="text"
+                value={authorizedPickups}
+                onChange={(e) => setAuthorizedPickups(e.target.value)}
+                placeholder="e.g. John Smith, Mary Jones"
+                className={inputCls}
+              />
+              <p className="text-green-700 text-xs mt-1">
+                Enter once. Applies to all children in this family.
+              </p>
+            </div>
           </div>
+
           <button
             onClick={handleParentContinue}
             disabled={!canContinue}
@@ -484,6 +766,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
           >
             Continue →
           </button>
+
           <button
             onClick={() => setStep("welcome")}
             className="w-full mt-4 py-3 rounded-2xl text-sm font-medium text-green-600"
@@ -495,61 +778,91 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
     );
   }
 
-  // ── children ──────────────────────────────────────────────────────────────
+  // ── children edit / new child info ────────────────────────────────────────
 
   if (step === "children") {
-    const canContinue = children.every((c) => c.firstName.trim() && c.lastName.trim() && c.dateOfBirth);
+    const canContinue = children.some(
+      (child) => child.firstName.trim() && child.lastName.trim() && child.dateOfBirth,
+    );
+
     return (
       <div className="min-h-screen" style={{ backgroundColor: BG }}>
         <div className="flex flex-col items-center p-6">
           <div className="w-full max-w-lg">
+            <div className="text-center mb-6">
+              <h1 className="text-3xl font-bold text-white" style={{ fontFamily: "Georgia, serif" }}>
+                {returning ? "Edit Family Info" : "Children"}
+              </h1>
+              <p className="text-green-600 mt-1 text-sm">
+                {returning
+                  ? "Update child details only if something has changed."
+                  : "Add each child in your family."}
+              </p>
+            </div>
+
             {returning && (
               <div
                 className="rounded-2xl p-4 mb-6"
                 style={{ backgroundColor: "#1a4d1a", border: "1px solid #4ade80" }}
               >
                 <p className="text-green-300 font-semibold text-center">
-                  Welcome back, {parentFirstName}! We pre-filled your children&apos;s information.
+                  Editing family information for {parentFirstName}.
                 </p>
               </div>
             )}
-            <div className="text-center mb-6">
-              <h1 className="text-3xl font-bold text-white" style={{ fontFamily: "Georgia, serif" }}>
-                Children
-              </h1>
-              <p className="text-green-600 mt-1 text-sm">Add each child checking in today</p>
+
+            <div
+              className="rounded-2xl p-5 mb-5"
+              style={{ backgroundColor: CARD, border: "1px solid #2d5a2d" }}
+            >
+              <p className={labelCls}>Family Authorized Pickups</p>
+              <input
+                type="text"
+                value={authorizedPickups}
+                onChange={(e) => setAuthorizedPickups(e.target.value)}
+                placeholder="e.g. John Smith, Mary Jones"
+                className={inputCls}
+                style={{ fontSize: "1rem" }}
+              />
+              <p className="text-green-700 text-xs mt-2">
+                Enter once. Applies to all children in this family.
+              </p>
             </div>
-            {children.map((child, i) => (
+
+            {children.map((child, index) => (
               <ChildCard
-                key={i}
-                index={i}
+                key={index}
+                index={index}
                 child={child}
                 rooms={rooms}
                 showRemove={children.length > 1}
-                onChange={(updated) => setChildren((cs) => cs.map((c, j) => (j === i ? updated : c)))}
-                onRemove={() => setChildren((cs) => cs.filter((_, j) => j !== i))}
+                onChange={(updated) => updateChild(index, updated)}
+                onRemove={() => removeChild(index)}
               />
             ))}
+
             <button
-              onClick={() => setChildren((cs) => [...cs, emptyChild()])}
+              onClick={addChild}
               className="w-full py-4 rounded-2xl text-lg font-bold mb-6"
               style={{ backgroundColor: "transparent", border: "2px dashed #2d5a2d", color: GREEN }}
             >
               + Add Another Child
             </button>
+
             <button
-              onClick={() => setStep("review")}
+              onClick={() => setStep("attendance")}
               disabled={!canContinue}
               className="w-full py-5 rounded-2xl text-xl font-bold transition-opacity"
               style={{ backgroundColor: GREEN, color: BG, opacity: canContinue ? 1 : 0.4 }}
             >
-              Continue →
+              Continue to Attendance →
             </button>
+
             <button
-              onClick={() => setStep(returning ? "welcome" : "parent")}
+              onClick={() => setStep(returning ? "attendance" : "parent")}
               className="w-full mt-4 py-3 rounded-2xl text-sm font-medium text-green-600"
             >
-              ← Back
+              ← {returning ? "Back to Attendance" : "Back"}
             </button>
           </div>
         </div>
@@ -557,61 +870,139 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
     );
   }
 
-  // ── review ────────────────────────────────────────────────────────────────
+  // ── attendance ────────────────────────────────────────────────────────────
 
-  if (step === "review") {
+  if (step === "attendance") {
+    const validChildren = children.filter((child) => child.firstName.trim() && child.lastName.trim());
+    const selectedCount = validChildren.filter((child) => child.selected).length;
+    const canSubmit = selectedCount > 0 && selectedSessionIds.size > 0 && !submitting;
+
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: BG }}>
-        <div className="w-full max-w-lg">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white" style={{ fontFamily: "Georgia, serif" }}>
-              Review &amp; Confirm
-            </h1>
-          </div>
-          <div className="rounded-2xl p-5 mb-4" style={{ backgroundColor: CARD, border: "1px solid #2d5a2d" }}>
-            <p className={labelCls}>Parent</p>
-            <p className="text-white text-lg font-bold">
-              {parentFirstName} {parentLastName}
-            </p>
-            <p className="text-green-500 text-sm">{parentPhone}</p>
-            {parentEmail && <p className="text-green-600 text-sm">{parentEmail}</p>}
-          </div>
-          {children.map((child, i) => (
-            <div key={i} className="rounded-2xl p-5 mb-4" style={{ backgroundColor: CARD, border: "1px solid #2d5a2d" }}>
-              <p className={labelCls}>Child {i + 1}</p>
-              <p className="text-white text-lg font-bold">
-                {child.firstName} {child.lastName}
+      <div className="min-h-screen" style={{ backgroundColor: BG }}>
+        <div className="flex flex-col items-center p-6">
+          <div className="w-full max-w-lg">
+            <div className="text-center mb-6">
+              <p className="text-green-400 text-sm font-semibold uppercase tracking-widest mb-2">
+                {serviceSummary() || churchName || "Children's Ministry"}
               </p>
-              {child.dateOfBirth && <p className="text-green-500 text-sm">DOB: {child.dateOfBirth}</p>}
-              {child.roomId && <p className="text-green-500 text-sm">Room: {roomMap[child.roomId] ?? child.roomId}</p>}
-              {child.allergies.length > 0 && (
-                <p className="text-red-400 text-sm mt-1">
-                  ⚠️ Allergies: {[...child.allergies, child.allergyOther].filter(Boolean).join(", ")}
+              <h1 className="text-3xl font-bold text-white" style={{ fontFamily: "Georgia, serif" }}>
+                Who is attending today?
+              </h1>
+              <p className="text-green-600 mt-1 text-sm">
+                Tap each child to mark attending or not attending.
+              </p>
+            </div>
+
+            <div
+              className="rounded-2xl p-5 mb-5"
+              style={{ backgroundColor: CARD, border: "1px solid #2d5a2d" }}
+            >
+              <p className={labelCls}>Parent / Guardian</p>
+              <p className="text-white text-xl font-bold">
+                {parentFirstName} {parentLastName}
+              </p>
+              <p className="text-green-500 text-sm">{parentPhone}</p>
+              {parentEmail && <p className="text-green-600 text-sm">{parentEmail}</p>}
+              {authorizedPickups && (
+                <p className="text-green-500 text-sm mt-2">
+                  Authorized pickups: {authorizedPickups}
                 </p>
               )}
-              {child.specialInstructions && (
-                <p className="text-green-600 text-sm mt-1">Notes: {child.specialInstructions}</p>
-              )}
-              {child.authorizedPickups && (
-                <p className="text-green-600 text-sm mt-1">Authorized pickups: {child.authorizedPickups}</p>
-              )}
             </div>
-          ))}
-          {submitError && <p className="text-red-400 text-sm text-center mb-4">{submitError}</p>}
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="w-full py-5 rounded-2xl text-xl font-bold transition-opacity"
-            style={{ backgroundColor: GREEN, color: BG, opacity: submitting ? 0.7 : 1 }}
-          >
-            {submitting ? "Checking In…" : "Confirm Check-In →"}
-          </button>
-          <button
-            onClick={() => setStep("children")}
-            className="w-full mt-4 py-3 rounded-2xl text-sm font-medium text-green-600"
-          >
-            ← Edit Children
-          </button>
+
+            <div className="space-y-4 mb-6">
+              {validChildren.map((child, index) => {
+                const originalIndex = children.indexOf(child);
+                const selected = child.selected;
+                const resolvedRoomId = child.roomId || autoAssignRoom(child.dateOfBirth, rooms);
+                const resolvedRoomName = resolvedRoomId ? roomName(resolvedRoomId, rooms) : null;
+
+                return (
+                  <button
+                    key={`${child.childId ?? "new"}-${index}`}
+                    type="button"
+                    onClick={() =>
+                      setChildren((current) =>
+                        current.map((item, i) =>
+                          i === originalIndex ? { ...item, selected: !item.selected } : item,
+                        ),
+                      )
+                    }
+                    className="w-full text-left rounded-3xl p-5 transition-all"
+                    style={{
+                      backgroundColor: selected ? "#1a4d1a" : CARD,
+                      border: `4px solid ${selected ? GREEN : "#2d5a2d"}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-2xl font-black"
+                        style={{
+                          backgroundColor: selected ? GREEN : "transparent",
+                          border: `3px solid ${selected ? GREEN : "#4b7a4b"}`,
+                          color: selected ? BG : "#4b7a4b",
+                        }}
+                      >
+                        {selected ? "✓" : "×"}
+                      </div>
+
+                      <div className="flex-1">
+                        <p className="text-white text-2xl font-black">
+                          {child.firstName} {child.lastName}
+                        </p>
+                        <p
+                          className="text-sm font-bold uppercase tracking-wider mt-1"
+                          style={{ color: selected ? GREEN : "#6b9b6b" }}
+                        >
+                          {selected ? "Attending this service" : "Not attending"}
+                        </p>
+                        {resolvedRoomName && (
+                          <p className="text-green-500 text-sm mt-1">Room: {resolvedRoomName}</p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedCount > 0 && (
+              <p className="text-green-400 text-sm text-center font-bold mb-4">
+                {selectedCount} child{selectedCount === 1 ? "" : "ren"} selected for check-in
+              </p>
+            )}
+
+            {submitError && <p className="text-red-400 text-sm text-center mb-4">{submitError}</p>}
+
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="w-full py-5 rounded-2xl text-xl font-bold transition-opacity"
+              style={{
+                backgroundColor: GREEN,
+                color: BG,
+                opacity: canSubmit ? 1 : 0.4,
+              }}
+            >
+              {submitting
+                ? "Checking In…"
+                : `Check In ${selectedCount} Selected Child${selectedCount === 1 ? "" : "ren"} →`}
+            </button>
+
+            <button
+              onClick={() => setStep(returning ? "children" : "children")}
+              className="w-full mt-4 py-3 rounded-2xl text-sm font-medium text-green-600"
+            >
+              ← Edit Family Information
+            </button>
+
+            <button
+              onClick={() => setStep("welcome")}
+              className="w-full mt-2 py-3 rounded-2xl text-sm font-medium text-green-700"
+            >
+              Use Different Phone Number
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -632,14 +1023,16 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
           .print-only { display: none; }
         `}</style>
 
-        {/* Screen UI */}
         <div className="no-print min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: BG }}>
           <div className="w-full max-w-md text-center">
             <div className="text-6xl mb-6">✅</div>
+
             <h1 className="text-3xl font-bold text-white mb-2" style={{ fontFamily: "Georgia, serif" }}>
               Checked In!
             </h1>
+
             <p className="text-green-400 text-sm mb-6">Your security code is:</p>
+
             <div
               className="rounded-3xl p-8 mb-6"
               style={{ backgroundColor: CARD, border: "2px solid #4ade80" }}
@@ -650,20 +1043,25 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
               >
                 {securityCode}
               </p>
+
               <p className="text-green-500 text-sm mt-4">
                 You will need this code to pick up your child
               </p>
             </div>
+
             {resultChildren.length > 0 && (
               <div className="mb-6 space-y-2">
-                {resultChildren.map((c, i) => (
-                  <div key={i} className="rounded-2xl px-4 py-3" style={{ backgroundColor: CARD }}>
-                    <p className="text-white font-semibold">{c.name}</p>
-                    {c.room && <p className="text-green-500 text-sm">Room: {c.room}</p>}
+                {resultChildren.map((child, index) => (
+                  <div key={index} className="rounded-2xl px-4 py-3" style={{ backgroundColor: CARD }}>
+                    <p className="text-white font-semibold">{child.name}</p>
+                    <p className="text-green-500 text-sm">
+                      Room: {child.room ?? "No room assigned"}
+                    </p>
                   </div>
                 ))}
               </div>
             )}
+
             {labels.length > 0 && (
               <button
                 onClick={() => window.print()}
@@ -673,6 +1071,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                 🖨️ Print Labels
               </button>
             )}
+
             <button
               onClick={reset}
               className="w-full py-4 rounded-2xl text-lg font-bold"
@@ -683,13 +1082,12 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
           </div>
         </div>
 
-        {/* Print-only label area */}
         <div className="print-only">
-          {labels.map((label, i) =>
+          {labels.map((label, index) =>
             label.labelType === "parent" ? (
-              <KioskParentLabel key={i} label={label} />
+              <KioskParentLabel key={index} label={label} />
             ) : (
-              <KioskChildLabel key={i} label={label} />
+              <KioskChildLabel key={index} label={label} />
             ),
           )}
         </div>
@@ -734,6 +1132,7 @@ function KioskChildLabel({ label }: { label: ImmediateLabel }) {
         >
           Child Check-In
         </span>
+
         {label.roomName && (
           <span
             style={{
@@ -748,13 +1147,16 @@ function KioskChildLabel({ label }: { label: ImmediateLabel }) {
           </span>
         )}
       </div>
+
       <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1, margin: "4px 0 0" }}>
         {label.childName}
       </div>
+
       <div style={{ fontSize: 11, color: "#333", marginTop: 2 }}>
         Parent: {label.parentName}
         {label.parentPhone ? ` · ${label.parentPhone}` : ""}
       </div>
+
       {(label.allergies || label.medicalNotes || label.specialInstructions) && (
         <div style={{ marginTop: 4 }}>
           {label.allergies && (
@@ -773,11 +1175,13 @@ function KioskChildLabel({ label }: { label: ImmediateLabel }) {
               ⚠ ALLERGY: {label.allergies}
             </div>
           )}
+
           {label.medicalNotes && (
             <div style={{ fontSize: 10, color: "#333" }}>
               <strong>Medical:</strong> {label.medicalNotes}
             </div>
           )}
+
           {label.specialInstructions && (
             <div style={{ fontSize: 10, color: "#333" }}>
               <strong>Instr:</strong> {label.specialInstructions}
@@ -785,6 +1189,7 @@ function KioskChildLabel({ label }: { label: ImmediateLabel }) {
           )}
         </div>
       )}
+
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end", marginTop: "auto" }}>
         <div>
           <div style={{ fontSize: 9, textAlign: "right", color: "#555", marginBottom: 1 }}>PICKUP CODE</div>
@@ -821,16 +1226,27 @@ function KioskParentLabel({ label }: { label: ImmediateLabel }) {
           borderRadius: 3,
         }}
       >
-        👪 Parent Pickup
+        Parent Pickup
       </div>
+
       <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.1, marginTop: 6 }}>
         {label.parentName}
       </div>
+
+      {label.authorizedPickups && (
+        <div style={{ fontSize: 10, color: "#111", marginTop: 3 }}>
+          <strong>Auth. Pickups:</strong> {label.authorizedPickups}
+        </div>
+      )}
+
       <div style={{ fontSize: 12, color: "#333", marginTop: 4 }}>
         {label.childName}
       </div>
+
       <div style={{ marginTop: "auto", borderTop: "1.5px solid #000", paddingTop: 6 }}>
-        <div style={{ fontSize: 9, color: "#555", marginBottom: 2 }}>SECURITY CODE — REQUIRED FOR PICKUP</div>
+        <div style={{ fontSize: 9, color: "#555", marginBottom: 2 }}>
+          SECURITY CODE — REQUIRED FOR PICKUP
+        </div>
         <div
           style={{
             fontSize: 40,
@@ -861,23 +1277,36 @@ function ChildCard({
   child: ChildForm;
   rooms: Room[];
   showRemove: boolean;
-  onChange: (c: ChildForm) => void;
+  onChange: (child: ChildForm) => void;
   onRemove: () => void;
 }) {
-  function toggleAllergy(opt: string) {
-    const isSelected = child.allergies.includes(opt);
+  function toggleAllergy(option: string) {
+    const isSelected = child.allergies.includes(option);
+
     let next: string[];
-    if (opt === "No Known Allergies") {
+
+    if (option === "No Known Allergies") {
       next = isSelected ? [] : ["No Known Allergies"];
     } else {
       next = isSelected
-        ? child.allergies.filter((a) => a !== opt)
-        : [...child.allergies.filter((a) => a !== "No Known Allergies"), opt];
+        ? child.allergies.filter((item) => item !== option)
+        : [...child.allergies.filter((item) => item !== "No Known Allergies"), option];
     }
+
     onChange({
       ...child,
       allergies: next,
-      allergyOther: isSelected && opt === "Other" ? "" : child.allergyOther,
+      allergyOther: isSelected && option === "Other" ? "" : child.allergyOther,
+    });
+  }
+
+  function handleDobChange(dob: string) {
+    const assignedRoomId = autoAssignRoom(dob, rooms);
+
+    onChange({
+      ...child,
+      dateOfBirth: dob,
+      roomId: assignedRoomId || child.roomId,
     });
   }
 
@@ -885,6 +1314,7 @@ function ChildCard({
     <div className="rounded-2xl p-5 mb-4" style={{ backgroundColor: CARD, border: "1px solid #2d5a2d" }}>
       <div className="flex justify-between items-center mb-4">
         <p className="text-green-400 text-xs font-bold uppercase tracking-widest">Child {index + 1}</p>
+
         {showRemove && (
           <button onClick={onRemove} className="text-red-400 text-sm font-bold">
             Remove
@@ -903,6 +1333,7 @@ function ChildCard({
             className={inputCls}
           />
         </div>
+
         <div>
           <label className={labelCls}>Last Name *</label>
           <input
@@ -923,12 +1354,13 @@ function ChildCard({
             value={child.dateOfBirth}
             max={new Date().toISOString().slice(0, 10)}
             min="2000-01-01"
-            onChange={(e) => onChange({ ...child, dateOfBirth: e.target.value })}
+            onChange={(e) => handleDobChange(e.target.value)}
             required
             className={inputCls}
             style={{ colorScheme: "dark" }}
           />
         </div>
+
         {rooms.length > 0 && (
           <div>
             <label className={labelCls}>Room</label>
@@ -938,10 +1370,12 @@ function ChildCard({
               className={inputCls}
               style={{ appearance: "none" }}
             >
-              <option value="" style={{ backgroundColor: BG }}>Select room</option>
-              {rooms.map((r) => (
-                <option key={r.id} value={r.id} style={{ backgroundColor: BG }}>
-                  {r.name}
+              <option value="" style={{ backgroundColor: BG }}>
+                Select room
+              </option>
+              {rooms.map((room) => (
+                <option key={room.id} value={room.id} style={{ backgroundColor: BG }}>
+                  {room.name}
                 </option>
               ))}
             </select>
@@ -952,13 +1386,14 @@ function ChildCard({
       <div className="mb-4">
         <label className={labelCls}>Allergies</label>
         <div className="grid grid-cols-2 gap-2 mb-2">
-          {ALLERGY_OPTIONS.map((opt) => {
-            const selected = child.allergies.includes(opt);
+          {ALLERGY_OPTIONS.map((option) => {
+            const selected = child.allergies.includes(option);
+
             return (
               <button
-                key={opt}
+                key={option}
                 type="button"
-                onClick={() => toggleAllergy(opt)}
+                onClick={() => toggleAllergy(option)}
                 className="text-left rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
                 style={{
                   backgroundColor: selected ? "#1a4d1a" : "rgba(255,255,255,0.05)",
@@ -966,11 +1401,13 @@ function ChildCard({
                   color: selected ? GREEN : "#6b9b6b",
                 }}
               >
-                {selected ? "✓ " : ""}{opt}
+                {selected ? "✓ " : ""}
+                {option}
               </button>
             );
           })}
         </div>
+
         {child.allergies.includes("Other") && (
           <input
             type="text"
@@ -984,27 +1421,25 @@ function ChildCard({
       </div>
 
       <div className="mb-4">
-        <label className={labelCls}>Special Instructions / Medical Notes (optional)</label>
+        <label className={labelCls}>Medical Notes (optional)</label>
         <textarea
-          value={child.specialInstructions}
-          onChange={(e) => onChange({ ...child, specialInstructions: e.target.value })}
-          placeholder="e.g. carries EpiPen, bathroom reminder every hour"
+          value={child.medicalNotes}
+          onChange={(e) => onChange({ ...child, medicalNotes: e.target.value })}
+          placeholder="e.g. carries EpiPen, uses inhaler"
           rows={2}
           className="w-full px-5 py-4 rounded-2xl bg-white/10 border border-green-800 text-white placeholder-green-700 focus:outline-none focus:border-green-400 resize-none text-base"
         />
       </div>
 
       <div>
-        <label className={labelCls}>Authorized Pickups (optional)</label>
-        <input
-          type="text"
-          value={child.authorizedPickups}
-          onChange={(e) => onChange({ ...child, authorizedPickups: e.target.value })}
-          placeholder="e.g. John Smith, Mary Jones"
-          className={inputCls}
-          style={{ fontSize: "1rem" }}
+        <label className={labelCls}>Special Instructions (optional)</label>
+        <textarea
+          value={child.specialInstructions}
+          onChange={(e) => onChange({ ...child, specialInstructions: e.target.value })}
+          placeholder="e.g. bathroom reminder every hour"
+          rows={2}
+          className="w-full px-5 py-4 rounded-2xl bg-white/10 border border-green-800 text-white placeholder-green-700 focus:outline-none focus:border-green-400 resize-none text-base"
         />
-        <p className="text-green-700 text-xs mt-1">Comma-separated names</p>
       </div>
     </div>
   );
