@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -63,7 +64,6 @@ const SECTIONS = [
 
 export default function ChildrenMinistryPage() {
   const router = useRouter();
-  const selectedChurchIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [children, setChildren] = useState<Child[]>([]);
   const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
@@ -76,13 +76,10 @@ export default function ChildrenMinistryPage() {
         console.log("Dashboard client user unavailable:", error?.message ?? null);
         return;
       }
-      const urlParams = new URLSearchParams(window.location.search);
-      selectedChurchIdRef.current = urlParams.get("churchId") ?? localStorage.getItem("selected_church_id");
-      const churchHeader: Record<string, string> = selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
       const [childrenRes, sessionsRes, spiritualBdRes] = await Promise.all([
-        fetch("/api/children-ministry/children", { credentials: "include", headers: churchHeader }),
-        fetch("/api/checkin/attendance-report", { credentials: "include", headers: churchHeader }),
-        fetch("/api/children-ministry/spiritual-birthdays", { credentials: "include", headers: churchHeader }),
+        apiFetch("/api/children-ministry/children", { credentials: "include" }),
+        apiFetch("/api/checkin/attendance-report", { credentials: "include" }),
+        apiFetch("/api/children-ministry/spiritual-birthdays", { credentials: "include" }),
       ]);
       if (childrenRes.ok) { const d = await childrenRes.json(); setChildren(d.children ?? []); }
       if (sessionsRes.ok) { const d = await sessionsRes.json(); setRecentSessions((d.sessions ?? []).slice(0, 4)); }
@@ -96,9 +93,11 @@ export default function ChildrenMinistryPage() {
   const spiritualBirthdays = upcomingSpiritualBirthdays(spiritualBirthdayEntries);
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-gray-400" style={{ fontFamily: "Georgia, serif" }}>Loading…</div>
-    </div>
+    <MinistryShell type="childrens">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-400" style={{ fontFamily: "Georgia, serif" }}>Loading…</div>
+      </div>
+    </MinistryShell>
   );
 
   return (

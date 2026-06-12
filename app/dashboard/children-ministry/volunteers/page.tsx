@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -76,10 +77,10 @@ function VolunteersPageContent() {
 
   async function loadAll(t: string) {
     const [vRes, rRes, eRes, mRes] = await Promise.all([
-      fetch("/api/children-ministry/volunteers", { headers: { Authorization: `Bearer ${t}` } }),
-      fetch("/api/children-ministry/volunteer-roles", { headers: { Authorization: `Bearer ${t}` } }),
-      fetch("/api/children-ministry/service-events", { headers: { Authorization: `Bearer ${t}` } }),
-      fetch("/api/members", { headers: { Authorization: `Bearer ${t}` } }),
+      apiFetch("/api/children-ministry/volunteers", { headers: { Authorization: `Bearer ${t}` } }),
+      apiFetch("/api/children-ministry/volunteer-roles", { headers: { Authorization: `Bearer ${t}` } }),
+      apiFetch("/api/children-ministry/service-events", { headers: { Authorization: `Bearer ${t}` } }),
+      apiFetch("/api/members", { headers: { Authorization: `Bearer ${t}` } }),
     ]);
     if (vRes.ok) setVolunteers((await vRes.json()).volunteers ?? []);
     if (rRes.ok) setRoles((await rRes.json()).roles ?? []);
@@ -106,7 +107,7 @@ function VolunteersPageContent() {
 
   async function loadAssignments(eventId: string) {
     if (!token) return;
-    const res = await fetch(`/api/children-ministry/service-events/${eventId}/assignments`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await apiFetch(`/api/children-ministry/service-events/${eventId}/assignments`, { headers: { Authorization: `Bearer ${token}` } });
     if (res.ok) { const d = await res.json(); setEventAssignments(m => ({ ...m, [eventId]: d.assignments ?? [] })); }
   }
 
@@ -122,7 +123,7 @@ function VolunteersPageContent() {
     const payload = { first_name: volForm.first_name, last_name: volForm.last_name, email: volForm.email, phone: volForm.phone, roles: volForm.roles, background_check_status: volForm.background_check_status, background_check_date: volForm.background_check_date || undefined, notes: volForm.notes };
     const url = editVol ? `/api/children-ministry/volunteers/${editVol.id}` : "/api/children-ministry/volunteers";
     const method = editVol ? "PATCH" : "POST";
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) });
+    const res = await apiFetch(url, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) });
     if (!res.ok) { const d = await res.json(); setVolError(d.error ?? "Error"); setSavingVol(false); return; }
     setSavingVol(false); setShowVolModal(false); setEditVol(null);
     await loadAll(token);
@@ -133,7 +134,7 @@ function VolunteersPageContent() {
   async function saveEvent() {
     if (!token || !eventForm.title.trim() || !eventForm.event_date) return;
     setSavingEvent(true);
-    await fetch("/api/children-ministry/service-events", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(eventForm) });
+    await apiFetch("/api/children-ministry/service-events", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(eventForm) });
     setSavingEvent(false); setShowEventModal(false); setEventForm({ title: "", event_date: "", start_time: "", end_time: "", notes: "" });
     await loadAll(token);
   }
@@ -141,7 +142,7 @@ function VolunteersPageContent() {
   async function assignVolunteer(eventId: string, volunteerId: string) {
     if (!token || !assignRole) return;
     setAssigning(volunteerId); setAssignWarning("");
-    const res = await fetch(`/api/children-ministry/service-events/${eventId}/assignments`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ volunteer_id: volunteerId, role_name: assignRole }) });
+    const res = await apiFetch(`/api/children-ministry/service-events/${eventId}/assignments`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ volunteer_id: volunteerId, role_name: assignRole }) });
     const d = await res.json();
     setAssigning(null);
     if (!res.ok) { setAssignWarning(d.error ?? "Error"); return; }
@@ -152,14 +153,14 @@ function VolunteersPageContent() {
 
   async function updateAssignment(eventId: string, assignmentId: string, updates: any) {
     if (!token) return;
-    await fetch(`/api/children-ministry/service-events/${eventId}/assignments/${assignmentId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) });
+    await apiFetch(`/api/children-ministry/service-events/${eventId}/assignments/${assignmentId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(updates) });
     await loadAssignments(eventId);
     if (updates.status === "no_show") await loadAll(token);
   }
 
   async function removeAssignment(eventId: string, assignmentId: string) {
     if (!token || !confirm("Remove this volunteer?")) return;
-    await fetch(`/api/children-ministry/service-events/${eventId}/assignments/${assignmentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await apiFetch(`/api/children-ministry/service-events/${eventId}/assignments/${assignmentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
     await loadAssignments(eventId);
     await loadAll(token);
   }
@@ -167,7 +168,7 @@ function VolunteersPageContent() {
   async function sendReminders(eventId: string) {
     if (!token) return;
     setSendingReminders(eventId);
-    const res = await fetch(`/api/children-ministry/service-events/${eventId}/send-reminders`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const res = await apiFetch(`/api/children-ministry/service-events/${eventId}/send-reminders`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     const d = await res.json();
     setSendingReminders(null);
     setReminderMsg(m => ({ ...m, [eventId]: res.ok ? `✅ ${d.sent} reminders sent` : "Failed" }));
@@ -179,9 +180,9 @@ function VolunteersPageContent() {
     if (!token || !roleForm.name.trim()) return;
     setSavingRole(true);
     if (editRole) {
-      await fetch(`/api/children-ministry/volunteer-roles/${editRole.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(roleForm) });
+      await apiFetch(`/api/children-ministry/volunteer-roles/${editRole.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(roleForm) });
     } else {
-      await fetch("/api/children-ministry/volunteer-roles", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...roleForm, sort_order: roles.length }) });
+      await apiFetch("/api/children-ministry/volunteer-roles", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ ...roleForm, sort_order: roles.length }) });
     }
     setSavingRole(false); setShowRoleModal(false); setEditRole(null);
     await loadAll(token);
@@ -189,7 +190,7 @@ function VolunteersPageContent() {
 
   async function markUnavailable() {
     if (!token || !unavailVol || !unavailDate) return;
-    await fetch(`/api/children-ministry/volunteers/${unavailVol.id}/availability`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ unavailable_date: unavailDate }) });
+    await apiFetch(`/api/children-ministry/volunteers/${unavailVol.id}/availability`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ unavailable_date: unavailDate }) });
     setUnavailVol(null);
   }
 
@@ -205,7 +206,7 @@ function VolunteersPageContent() {
 
   const stats = { total: volunteers.length, active: volunteers.filter(v => v.is_active).length, cleared: volunteers.filter(v => v.background_check_status === "cleared").length, avgReliability: volunteers.length ? Math.round(volunteers.reduce((s, v) => s + v.reliability_score, 0) / volunteers.length) : 100 };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type="childrens"><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type="childrens">
@@ -363,7 +364,7 @@ function VolunteersPageContent() {
 
                         {/* Event status */}
                         <div className="flex items-center gap-3 mt-2">
-                          <select value={e.status} onChange={async ev => { if (!token) return; await fetch(`/api/children-ministry/service-events/${e.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status: ev.target.value }) }); await loadAll(token); }} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium">
+                          <select value={e.status} onChange={async ev => { if (!token) return; await apiFetch(`/api/children-ministry/service-events/${e.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ status: ev.target.value }) }); await loadAll(token); }} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium">
                             <option value="scheduled">Scheduled</option>
                             <option value="completed">Completed</option>
                             <option value="cancelled">Cancelled</option>
@@ -399,10 +400,10 @@ function VolunteersPageContent() {
                         <p className="text-xs text-gray-400">{volCount} volunteer{volCount !== 1 ? "s" : ""} can fill this role</p>
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
-                        <button onClick={() => { if (idx > 0) { fetch(`/api/children-ministry/volunteer-roles/${role.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ sort_order: role.sort_order - 1 }) }).then(() => loadAll(token!)); } }} disabled={idx === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-30 text-sm px-1">▲</button>
-                        <button onClick={() => { if (idx < roles.length - 1) { fetch(`/api/children-ministry/volunteer-roles/${role.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ sort_order: role.sort_order + 1 }) }).then(() => loadAll(token!)); } }} disabled={idx === roles.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-30 text-sm px-1">▼</button>
+                        <button onClick={() => { if (idx > 0) { apiFetch(`/api/children-ministry/volunteer-roles/${role.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ sort_order: role.sort_order - 1 }) }).then(() => loadAll(token!)); } }} disabled={idx === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-30 text-sm px-1">▲</button>
+                        <button onClick={() => { if (idx < roles.length - 1) { apiFetch(`/api/children-ministry/volunteer-roles/${role.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ sort_order: role.sort_order + 1 }) }).then(() => loadAll(token!)); } }} disabled={idx === roles.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-30 text-sm px-1">▼</button>
                         <button onClick={() => { setEditRole(role); setRoleForm({ name: role.name, description: role.description ?? "", color: role.color }); setShowRoleModal(true); }} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 text-gray-600 hover:border-orange-300 transition-colors">Edit</button>
-                        <button onClick={async () => { if (!confirm("Delete this role?") || !token) return; await fetch(`/api/children-ministry/volunteer-roles/${role.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }); await loadAll(token); }} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-red-100 text-red-400 hover:border-red-300 transition-colors">Delete</button>
+                        <button onClick={async () => { if (!confirm("Delete this role?") || !token) return; await apiFetch(`/api/children-ministry/volunteer-roles/${role.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }); await loadAll(token); }} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-red-100 text-red-400 hover:border-red-300 transition-colors">Delete</button>
                       </div>
                     </div>
                   );

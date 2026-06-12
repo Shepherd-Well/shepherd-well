@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -45,15 +46,9 @@ export default function ParentsPage() {
       }
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const selectedChurchId = localStorage.getItem("selected_church_id");
-      console.log("[Parents] init: selectedChurchId from localStorage:", selectedChurchId ?? "(none — will use logged-in church)");
-      const res = await fetch("/api/children-ministry/parents", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          ...(selectedChurchId ? { "x-selected-church-id": selectedChurchId } : {}),
-        },
+      const res = await apiFetch("/api/children-ministry/parents", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      console.log("[Parents] fetch x-selected-church-id sent:", selectedChurchId ?? "(not sent)");
       if (res.ok) { const d = await res.json(); setParents(d.parents ?? []); }
       setLoading(false);
     }
@@ -69,9 +64,11 @@ export default function ParentsPage() {
   });
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-gray-400">Loading…</div>
-    </div>
+    <MinistryShell type="childrens">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-400">Loading…</div>
+      </div>
+    </MinistryShell>
   );
 
   return (

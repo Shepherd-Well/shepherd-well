@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -62,7 +63,7 @@ export default function AttendancePage() {
   }, [records]);
 
   async function loadAttendance(t: string, sid: string) {
-    const res = await fetch(`/api/children-ministry/attendance?season_id=${sid}`, { headers: { Authorization: `Bearer ${t}` } });
+    const res = await apiFetch(`/api/children-ministry/attendance?season_id=${sid}`, { headers: { Authorization: `Bearer ${t}` } });
     const data = await res.json();
     setRecords(data.attendance ?? []);
   }
@@ -80,8 +81,8 @@ export default function AttendancePage() {
       setToken(t);
 
       const [sRes, cRes] = await Promise.all([
-        fetch("/api/children-ministry/seasons", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/seasons", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       const sData = await sRes.json();
       const cData = await cRes.json();
@@ -103,7 +104,7 @@ export default function AttendancePage() {
     setToggling(key);
 
     const currentlyPresent = attendanceMap[key] ?? false;
-    const res = await fetch("/api/children-ministry/attendance", {
+    const res = await apiFetch("/api/children-ministry/attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ seasonId: activeSeason.id, childId: child.id, sessionDate: date, present: !currentlyPresent }),
@@ -136,7 +137,7 @@ export default function AttendancePage() {
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type="childrens"><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type="childrens">

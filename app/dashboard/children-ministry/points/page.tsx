@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -63,7 +64,7 @@ export default function PointsPage() {
   const [awardSuccess, setAwardSuccess] = useState("");
 
   async function loadHistory(t: string, sid: string) {
-    const res = await fetch(`/api/children-ministry/points?season_id=${sid}&limit=50`, { headers: { Authorization: `Bearer ${t}` } });
+    const res = await apiFetch(`/api/children-ministry/points?season_id=${sid}&limit=50`, { headers: { Authorization: `Bearer ${t}` } });
     const data = await res.json();
     setHistory(data.points ?? []);
   }
@@ -81,9 +82,9 @@ export default function PointsPage() {
       setToken(t);
 
       const [sRes, tRes, cRes] = await Promise.all([
-        fetch("/api/children-ministry/seasons", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/children-ministry/teams", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/seasons", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/teams", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       const sData = await sRes.json();
       const tData = await tRes.json();
@@ -118,7 +119,7 @@ export default function PointsPage() {
     if (target === "child" && !childId) { setAwardError("Select a child"); return; }
 
     setAwarding(true); setAwardError(""); setAwardSuccess("");
-    const res = await fetch("/api/children-ministry/points", {
+    const res = await apiFetch("/api/children-ministry/points", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -136,7 +137,7 @@ export default function PointsPage() {
     if (token && activeSeason) await loadHistory(token, activeSeason.id);
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type="childrens"><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type="childrens">

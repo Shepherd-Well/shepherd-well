@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -41,7 +42,6 @@ function calcAge(dob: string): number {
 
 export default function VisitorsPage() {
   const router = useRouter();
-  const selectedChurchIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [families, setFamilies] = useState<Family[]>([]);
   const [stats, setStats] = useState({ today: 0, this_week: 0, this_month: 0, converted: 0 });
@@ -56,14 +56,10 @@ export default function VisitorsPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [savingNotes, setSavingNotes] = useState<string | null>(null);
 
-  function ch(): Record<string, string> {
-    return selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-  }
-
   async function load() {
     const [famRes, tokRes] = await Promise.all([
-      fetch("/api/children-ministry/visitors", { credentials: "include", headers: ch() }),
-      fetch("/api/children-ministry/visitor-tokens", { credentials: "include", headers: ch() }),
+      apiFetch("/api/children-ministry/visitors", { credentials: "include" }),
+      apiFetch("/api/children-ministry/visitor-tokens", { credentials: "include" }),
     ]);
     if (famRes.ok) { const d = await famRes.json(); setFamilies(d.families ?? []); setStats(d.stats ?? stats); }
     if (tokRes.ok) { const d = await tokRes.json(); setTokens(d.tokens ?? []); }
@@ -76,12 +72,6 @@ export default function VisitorsPage() {
         console.log("Dashboard client user unavailable:", error?.message ?? null);
         return;
       }
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlChurchId = urlParams.get("churchId");
-      const lsChurchId = localStorage.getItem("selected_church_id");
-      selectedChurchIdRef.current = urlChurchId ?? lsChurchId;
-      console.log("[Visitors] init: urlChurchId:", urlChurchId, "lsChurchId:", lsChurchId, "resolved:", selectedChurchIdRef.current);
-      console.log("[Visitors] fetch headers:", ch());
       await load();
       setLoading(false);
     }
@@ -98,10 +88,10 @@ export default function VisitorsPage() {
 
   async function addToken() {
     if (!newTokenLabel.trim()) return;
-    await fetch("/api/children-ministry/visitor-tokens", {
+    await apiFetch("/api/children-ministry/visitor-tokens", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...ch() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: newTokenLabel }),
     });
     setNewTokenLabel(""); setShowAddToken(false);
@@ -109,10 +99,10 @@ export default function VisitorsPage() {
   }
 
   async function updateStatus(familyId: string, status: string) {
-    await fetch(`/api/children-ministry/visitors/${familyId}`, {
+    await apiFetch(`/api/children-ministry/visitors/${familyId}`, {
       method: "PATCH",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...ch() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
     setFamilies(fs => fs.map(f => f.id === familyId ? { ...f, status } : f));
@@ -120,10 +110,10 @@ export default function VisitorsPage() {
 
   async function saveNotes(familyId: string) {
     setSavingNotes(familyId);
-    await fetch(`/api/children-ministry/visitors/${familyId}`, {
+    await apiFetch(`/api/children-ministry/visitors/${familyId}`, {
       method: "PATCH",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...ch() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notes: notes[familyId] ?? "" }),
     });
     setSavingNotes(null);
@@ -132,10 +122,9 @@ export default function VisitorsPage() {
 
   async function convertFamily(familyId: string) {
     setConverting(familyId);
-    const res = await fetch(`/api/children-ministry/visitors/${familyId}/convert`, {
+    const res = await apiFetch(`/api/children-ministry/visitors/${familyId}/convert`, {
       method: "POST",
       credentials: "include",
-      headers: ch(),
     });
     const d = await res.json();
     setConverting(null);
@@ -149,7 +138,7 @@ export default function VisitorsPage() {
 
   const filtered = families.filter(f => filter === "all" || f.status === filter);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type="childrens"><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type="childrens">

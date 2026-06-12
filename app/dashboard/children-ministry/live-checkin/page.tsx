@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -23,7 +24,6 @@ function fmtTime(iso: string) {
 
 export default function LiveCheckinPage() {
   const router = useRouter();
-  const selectedChurchIdRef = useRef<string | null>(null);
   const [session, setSession] = useState<LiveSession | null>(null);
   const [rooms, setRooms] = useState<LiveRoom[]>([]);
   const [totalCheckedIn, setTotalCheckedIn] = useState(0);
@@ -36,8 +36,7 @@ export default function LiveCheckinPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchLive = useCallback(async () => {
-    const churchHeader: Record<string, string> = selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-    const res = await fetch("/api/checkin/live", { credentials: "include", headers: churchHeader });
+    const res = await apiFetch("/api/checkin/live", { credentials: "include" });
     if (!res.ok) return;
     const d = await res.json();
     setSession(d.session ?? null);
@@ -54,11 +53,8 @@ export default function LiveCheckinPage() {
         console.log("Dashboard client user unavailable:", error?.message ?? null);
         return;
       }
-      const urlParams = new URLSearchParams(window.location.search);
-      selectedChurchIdRef.current = urlParams.get("churchId") ?? localStorage.getItem("selected_church_id");
       await fetchLive();
-      const churchHeader: Record<string, string> = selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-      const roomsRes = await fetch("/api/checkin/update-record", { credentials: "include", headers: churchHeader });
+      const roomsRes = await apiFetch("/api/checkin/update-record", { credentials: "include" });
       if (roomsRes.ok) { const d = await roomsRes.json(); setAllRooms(d.rooms ?? []); }
     }
     init();
@@ -71,10 +67,9 @@ export default function LiveCheckinPage() {
 
   async function handleSaveRoom(recordId: string) {
     setSaving(true);
-    const churchHeader: Record<string, string> = selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-    await fetch("/api/checkin/update-record", {
+    await apiFetch("/api/checkin/update-record", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...churchHeader },
+      headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ recordId, roomId: editRoomId || null }),
     });
@@ -86,10 +81,9 @@ export default function LiveCheckinPage() {
   async function handleDelete(recordId: string) {
     if (!window.confirm("Remove this check-in record?")) return;
     setDeletingId(recordId);
-    const churchHeader: Record<string, string> = selectedChurchIdRef.current ? { "x-selected-church-id": selectedChurchIdRef.current } : {};
-    await fetch("/api/checkin/update-record", {
+    await apiFetch("/api/checkin/update-record", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json", ...churchHeader },
+      headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ recordId }),
     });

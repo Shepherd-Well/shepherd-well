@@ -73,9 +73,11 @@ export default function LetterTemplatePage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-gray-400">Loading…</div>
-    </div>
+    <MinistryShell type="childrens">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-400">Loading…</div>
+      </div>
+    </MinistryShell>
   );
 
   return (

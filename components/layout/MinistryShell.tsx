@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { MINISTRY_CONFIG, isInvitationOnly, hasTeamChallenge, hasGrowthModule, hasMetamorphosis } from "@/lib/ministry-config";
 
 // Ministry accent colors
@@ -68,7 +68,32 @@ interface MinistryShellProps {
 
 export default function MinistryShell({ type, children }: MinistryShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [impersonatingChurch, setImpersonatingChurch] = useState<string | null>(null);
+
+  useEffect(() => {
+    function readImpersonation() {
+      try {
+        const id = localStorage.getItem("selected_church_id");
+        const name = localStorage.getItem("selected_church_name");
+        setImpersonatingChurch(id && name ? name : null);
+      } catch {
+        setImpersonatingChurch(null);
+      }
+    }
+    readImpersonation();
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === "selected_church_id" || e.key === "selected_church_name") readImpersonation();
+    }
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", readImpersonation);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", readImpersonation);
+    };
+  }, [pathname]);
 
   const cfg = MINISTRY_CONFIG[type];
   const accent = getAccent(type);
@@ -93,6 +118,11 @@ export default function MinistryShell({ type, children }: MinistryShellProps) {
       {/* Ministry header */}
       <div style={{ padding: "16px", background: accent, flexShrink: 0 }}>
         <p style={{ fontSize: 24, margin: "0 0 4px", lineHeight: 1 }}>{cfg?.emoji ?? "⛪"}</p>
+        {impersonatingChurch && (
+          <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: 600, margin: "0 0 2px", letterSpacing: "0.02em" }}>
+            {impersonatingChurch}
+          </p>
+        )}
         <p style={{ color: "white", fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.3, fontFamily: "Georgia, serif" }}>
           {cfg?.name ?? type}
         </p>
@@ -176,8 +206,26 @@ export default function MinistryShell({ type, children }: MinistryShellProps) {
 
       {/* Main */}
       <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f9fafb", display: "flex", flexDirection: "column" }}>
+        {/* Impersonation banner — shown when master admin is viewing a church */}
+        {impersonatingChurch && (
+          <div style={{ backgroundColor: "#1e3a5f", color: "white", padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, fontSize: 13, fontWeight: 600, position: "sticky", top: 0, zIndex: 50, boxShadow: "0 2px 6px rgba(0,0,0,0.2)", flexShrink: 0 }}>
+            <span>👁️ Viewing as <strong>{impersonatingChurch}</strong></span>
+            <button
+              onClick={() => {
+                localStorage.removeItem("selected_church_id");
+                localStorage.removeItem("selected_church_name");
+                setImpersonatingChurch(null);
+                router.push("/dashboard");
+              }}
+              style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "5px 14px", cursor: "pointer", color: "white", fontSize: 12, fontWeight: 700 }}
+            >
+              ← Return to Master Admin
+            </button>
+          </div>
+        )}
+
         {/* Mobile header bar */}
-        <div className="ms-mobile-header" style={{ display: "none", alignItems: "center", gap: 12, padding: "10px 16px", background: accent, flexShrink: 0, position: "sticky", top: 0, zIndex: 30 }}>
+        <div className="ms-mobile-header" style={{ display: "none", alignItems: "center", gap: 12, padding: "10px 16px", background: accent, flexShrink: 0, position: "sticky", top: impersonatingChurch ? 44 : 0, zIndex: 30 }}>
           <button
             onClick={() => setSidebarOpen(true)}
             style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", color: "white", fontSize: 18, lineHeight: 1 }}
@@ -186,7 +234,7 @@ export default function MinistryShell({ type, children }: MinistryShellProps) {
             ☰
           </button>
           <p style={{ margin: 0, color: "white", fontWeight: 700, fontSize: 15, fontFamily: "Georgia, serif" }}>
-            {cfg?.emoji} {cfg?.name ?? type}
+            {cfg?.emoji} {impersonatingChurch ? `${impersonatingChurch} ${cfg?.name ?? type}` : (cfg?.name ?? type)}
           </p>
         </div>
         {children}

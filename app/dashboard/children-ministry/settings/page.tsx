@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -25,13 +26,6 @@ const DEFAULT_GRADES = ["3rd", "4th", "5th", "6th"];
 
 export default function ChildrenMinistrySettingsPage() {
   const router = useRouter();
-  const selectedChurchIdRef = useRef<string | null>(null);
-
-  function ch(): Record<string, string> {
-    return selectedChurchIdRef.current
-      ? { "x-selected-church-id": selectedChurchIdRef.current }
-      : {};
-  }
 
   const [loading, setLoading] = useState(true);
   const [sidebarLabel, setSidebarLabel] = useState("Children's Ministry");
@@ -44,16 +38,10 @@ export default function ChildrenMinistrySettingsPage() {
     async function init() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (!user || authError) {
-        console.log("Dashboard client user unavailable:", authError?.message ?? null);
         return;
       }
-      const urlParams = new URLSearchParams(window.location.search);
-      selectedChurchIdRef.current =
-        urlParams.get("churchId") ?? localStorage.getItem("selected_church_id");
-
-      const res = await fetch("/api/children-ministry/config", {
+      const res = await apiFetch("/api/children-ministry/config", {
         credentials: "include",
-        headers: ch(),
       });
       if (res.ok) {
         const d = await res.json();
@@ -77,10 +65,10 @@ export default function ChildrenMinistrySettingsPage() {
     setSaving(true);
     setSaved(false);
     setError("");
-    const res = await fetch("/api/children-ministry/config", {
+    const res = await apiFetch("/api/children-ministry/config", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...ch() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sidebarLabel, gradeLevels }),
     });
     setSaving(false);
@@ -95,9 +83,11 @@ export default function ChildrenMinistrySettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-400">Loading…</div>
-      </div>
+      <MinistryShell type="childrens">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-gray-400">Loading…</div>
+        </div>
+      </MinistryShell>
     );
   }
 

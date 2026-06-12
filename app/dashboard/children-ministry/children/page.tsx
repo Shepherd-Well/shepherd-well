@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 
 const supabase = createClient();
@@ -58,21 +59,15 @@ export default function ChildrenPage() {
   const [saving, setSaving] = useState(false);
 
   async function load(t: string) {
-    const selectedChurchId = localStorage.getItem("selected_church_id");
-    console.log("[Children] load: selectedChurchId from localStorage:", selectedChurchId ?? "(none — will use logged-in church)");
-    const res = await fetch("/api/children-ministry/children", {
-      headers: {
-        Authorization: `Bearer ${t}`,
-        ...(selectedChurchId ? { "x-selected-church-id": selectedChurchId } : {}),
-      },
+    const res = await apiFetch("/api/children-ministry/children", {
+      headers: { Authorization: `Bearer ${t}` },
     });
-    console.log("[Children] fetch x-selected-church-id sent:", selectedChurchId ?? "(not sent)");
     const data = await res.json();
     setChildren(data.children ?? []);
   }
 
   async function refreshMilestones(childId: string, t: string) {
-    const res = await fetch(`/api/children-ministry/children/${childId}/milestones`, {
+    const res = await apiFetch(`/api/children-ministry/children/${childId}/milestones`, {
       headers: { Authorization: `Bearer ${t}` },
     });
     if (!res.ok) return;
@@ -88,7 +83,7 @@ export default function ChildrenPage() {
   async function saveMilestone(type: "salvation" | "water_baptism") {
     if (!selectedChild || !token || !editValue) return;
     setSaving(true);
-    const res = await fetch(`/api/children-ministry/children/${selectedChild.id}/milestones`, {
+    const res = await apiFetch(`/api/children-ministry/children/${selectedChild.id}/milestones`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ milestoneType: type, completedAt: editValue }),
@@ -113,7 +108,7 @@ export default function ChildrenPage() {
     setMilestones(null);
     setEditField(null);
     setEditValue("");
-    fetch(`/api/children-ministry/children/${selectedChild.id}/milestones`, {
+    apiFetch(`/api/children-ministry/children/${selectedChild.id}/milestones`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then(async (res) => {
       if (cancelled || !res.ok) return;
@@ -151,9 +146,11 @@ export default function ChildrenPage() {
   );
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-gray-400">Loading…</div>
-    </div>
+    <MinistryShell type="childrens">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-400">Loading…</div>
+      </div>
+    </MinistryShell>
   );
 
   return (

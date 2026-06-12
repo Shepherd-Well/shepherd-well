@@ -6,6 +6,8 @@ export async function GET(req: NextRequest) {
   if (!ctx) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const { churchId } = ctx;
 
+  console.log('[/api/children-ministry/visitors] auth.churchId:', churchId, 'x-selected-church-id header:', req.headers.get('x-selected-church-id') ?? '(not sent)');
+
   const admin = adminClient();
 
   const { data: families, error } = await admin
@@ -13,6 +15,8 @@ export async function GET(req: NextRequest) {
     .select('id, parent1_first_name, parent1_last_name, parent1_phone, parent1_email, parent2_first_name, parent2_last_name, parent2_phone, parent2_email, address, how_did_you_hear, visit_date, follow_up_sent, follow_up_sent_at, next_day_sent, next_day_sent_at, notes, status, created_at')
     .eq('church_id', churchId)
     .order('created_at', { ascending: false });
+
+  console.log('[/api/children-ministry/visitors] Supabase query church_id:', churchId, '→ families returned:', families?.length ?? 0);
 
   if (error) return Response.json({ error: error.message }, { status: 400 });
 

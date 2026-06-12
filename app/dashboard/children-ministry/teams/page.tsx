@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api-fetch";
 import MinistryShell from "@/components/layout/MinistryShell";
 import { ProLockedOverlay } from "@/components/ProLockedOverlay";
 
@@ -68,7 +69,7 @@ export default function TeamsPage() {
   const [awarding, setAwarding] = useState(false);
 
   async function load(t: string, sid: string) {
-    const res = await fetch(`/api/children-ministry/teams?season_id=${sid}`, { headers: { Authorization: `Bearer ${t}` } });
+    const res = await apiFetch(`/api/children-ministry/teams?season_id=${sid}`, { headers: { Authorization: `Bearer ${t}` } });
     const data = await res.json();
     setTeams(data.teams ?? []);
   }
@@ -86,9 +87,9 @@ export default function TeamsPage() {
       setToken(t);
 
       const [proRes, sRes, cRes] = await Promise.all([
-        fetch("/api/addons/ministry-pro", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/children-ministry/seasons", { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/addons/ministry-pro", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/seasons", { headers: { Authorization: `Bearer ${t}` } }),
+        apiFetch("/api/children-ministry/children", { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       const proData = proRes.ok ? await proRes.json() : { active: false };
       setHasPro(proData.active ?? false);
@@ -109,7 +110,7 @@ export default function TeamsPage() {
     if (!form.name.trim()) { setSaveError("Team name required"); return; }
     if (!activeSeason) { setSaveError("No active season"); return; }
     setSaving(true); setSaveError("");
-    const res = await fetch("/api/children-ministry/teams", {
+    const res = await apiFetch("/api/children-ministry/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ seasonId: activeSeason.id, name: form.name, color: form.color, mascot: form.mascot, volunteerLeaderName: form.leaderName, volunteerLeaderEmail: form.leaderEmail, captainChildId: form.captainId || undefined, coCaptainChildId: form.coCaptainId || undefined }),
@@ -128,7 +129,7 @@ export default function TeamsPage() {
   async function saveEditTeam() {
     if (!editTeam || !editTeamForm.name.trim()) { setEditTeamError("Team name required"); return; }
     setEditTeamSaving(true); setEditTeamError("");
-    const res = await fetch(`/api/children-ministry/teams/${editTeam.id}`, {
+    const res = await apiFetch(`/api/children-ministry/teams/${editTeam.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name: editTeamForm.name, color: editTeamForm.color, mascot: editTeamForm.mascot, volunteerLeaderName: editTeamForm.leaderName, volunteerLeaderEmail: editTeamForm.leaderEmail, captainChildId: editTeamForm.captainId || null, coCaptainChildId: editTeamForm.coCaptainId || null }),
@@ -141,7 +142,7 @@ export default function TeamsPage() {
   async function doSplit() {
     if (!splitTeam || !splitForm.name.trim()) { setSplitError("New team name required"); return; }
     setSplitting(true); setSplitError("");
-    const res = await fetch(`/api/children-ministry/teams/${splitTeam.id}/split`, {
+    const res = await apiFetch(`/api/children-ministry/teams/${splitTeam.id}/split`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ newTeamName: splitForm.name, newTeamColor: splitForm.color, newTeamMascot: splitForm.mascot }),
@@ -154,7 +155,7 @@ export default function TeamsPage() {
   async function awardTeamPoints() {
     if (!awardTeam || !awardPts || Number(awardPts) <= 0) return;
     setAwarding(true);
-    await fetch("/api/children-ministry/points", {
+    await apiFetch("/api/children-ministry/points", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ seasonId: activeSeason?.id, teamId: awardTeam.id, category: "other", points: Number(awardPts), note: awardNote }),
@@ -163,7 +164,7 @@ export default function TeamsPage() {
     if (token && activeSeason) await load(token, activeSeason.id);
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div>;
+  if (loading) return <MinistryShell type="childrens"><div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400">Loading…</div></div></MinistryShell>;
 
   return (
     <MinistryShell type="childrens">
