@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -158,10 +158,29 @@ function pathActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+function readSelectedChurchFromStorage() {
+  if (typeof window === "undefined") {
+    return { id: null as string | null, name: null as string | null };
+  }
+
+  try {
+    const id = localStorage.getItem("selected_church_id");
+    const name = localStorage.getItem("selected_church_name");
+
+    return {
+      id: id && id.trim() ? id : null,
+      name: name && name.trim() ? name : null,
+    };
+  } catch {
+    return { id: null, name: null };
+  }
+}
+
 export default function AppShell(props: AppShellProps) {
   const { children } = props;
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [cmOpen, setCmOpen] = useState(false);
   const [msOpen, setMsOpen] = useState(false);
@@ -189,9 +208,48 @@ export default function AppShell(props: AppShellProps) {
     setCmOpen(CM_ITEMS.some(item => pathActive(pathname, item.href)));
     setMsOpen(MS_ITEMS.some(item => pathActive(pathname, item.href)));
     setShOpen(SH_ITEMS.some(item => pathActive(pathname, item.href)));
-    setImpersonatingChurch(localStorage.getItem("selected_church_name"));
+
+    const selectedFromUrl = searchParams.get("churchId");
+    const selectedFromStorage = readSelectedChurchFromStorage();
+
+    // SECURITY/ACCURACY: only show the master-admin impersonation banner when
+    // the stored selected church matches the churchId currently being viewed.
+    // This prevents a stale browser value from saying "Viewing as Lighthouse"
+    // while the server-rendered dashboard is actually ABC Church.
+    if (
+      selectedFromStorage.id &&
+      selectedFromStorage.name &&
+      (!selectedFromUrl || selectedFromStorage.id === selectedFromUrl)
+    ) {
+      setImpersonatingChurch(selectedFromStorage.name);
+    } else {
+      setImpersonatingChurch(null);
+    }
+
     setMounted(true);
-  }, [pathname]);
+  }, [pathname, searchParams]);
+
+  useEffect(() => {
+    function handleStorageChange(event: StorageEvent) {
+      if (event.key !== "selected_church_id" && event.key !== "selected_church_name") return;
+
+      const selectedFromUrl = searchParams.get("churchId");
+      const selectedFromStorage = readSelectedChurchFromStorage();
+
+      if (
+        selectedFromStorage.id &&
+        selectedFromStorage.name &&
+        (!selectedFromUrl || selectedFromStorage.id === selectedFromUrl)
+      ) {
+        setImpersonatingChurch(selectedFromStorage.name);
+      } else {
+        setImpersonatingChurch(null);
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [searchParams]);
 
   function toggle(key: string) {
     setCollapsed(prev => {
