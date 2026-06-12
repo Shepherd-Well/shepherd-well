@@ -26,7 +26,7 @@ export async function POST(
   if (!session) return Response.json({ error: 'Session not found' }, { status: 404 });
   if (session.status !== 'open') return Response.json({ error: 'Session is closed' }, { status: 400 });
 
-  // Search visitor families by parent1_phone or parent2_phone
+  // SECURITY: church-scoped lookup — family must belong to this session's church
   const { data: families } = await admin
     .from('cm_visitor_families')
     .select('id, parent1_first_name, parent1_last_name, parent1_phone, parent1_email, parent2_first_name, parent2_last_name, parent2_phone, parent2_email, authorized_pickups')
@@ -52,11 +52,12 @@ export async function POST(
     ? (family.parent1_email ?? null)
     : (family.parent2_email ?? family.parent1_email ?? null);
 
-  // Get saved children with birthday
+  // SECURITY: church-scoped lookup — children scoped by both family_id and church_id
   const { data: vcChildren } = await admin
     .from('cm_visitor_children')
     .select('id, first_name, last_name, date_of_birth, allergies, medical_notes, special_instructions')
     .eq('family_id', family.id)
+    .eq('church_id', session.church_id)
     .order('created_at');
 
   const children = (vcChildren ?? []).map((c) => ({
