@@ -312,7 +312,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
                   const parsed = parseName(child.name);
                   const parsedAllergies = parseAllergies(child.allergies);
                   const dob = child.dateOfBirth ?? "";
-                  const resolvedRoomId = child.roomId ?? autoAssignRoom(dob, rooms);
+                  const resolvedRoomId = autoAssignRoom(dob, rooms) || child.roomId || "";
 
                   return {
                     childId: child.id,
@@ -396,7 +396,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
             firstName: child.firstName.trim(),
             lastName: child.lastName.trim(),
             dateOfBirth: child.dateOfBirth || undefined,
-            roomId: child.roomId || autoAssignRoom(child.dateOfBirth, rooms) || undefined,
+            roomId: autoAssignRoom(child.dateOfBirth, rooms) || child.roomId || undefined,
             allergies: allergyPayload(child),
             allergyOther: child.allergyOther.trim() || undefined,
             medicalNotes: child.medicalNotes.trim() || undefined,
@@ -418,7 +418,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
       setLabels(data.labels ?? []);
       setResultChildren(
         selectedChildren.map((child) => {
-          const resolvedRoomId = child.roomId || autoAssignRoom(child.dateOfBirth, rooms);
+          const resolvedRoomId = autoAssignRoom(child.dateOfBirth, rooms) || child.roomId;
 
           return {
             name: `${child.firstName.trim()} ${child.lastName.trim()}`,
@@ -914,7 +914,7 @@ export default function ChurchKioskForm({ churchId, churchName, groups, ungroupe
               {validChildren.map((child, index) => {
                 const originalIndex = children.indexOf(child);
                 const selected = child.selected;
-                const resolvedRoomId = child.roomId || autoAssignRoom(child.dateOfBirth, rooms);
+                const resolvedRoomId = autoAssignRoom(child.dateOfBirth, rooms) || child.roomId;
                 const resolvedRoomName = resolvedRoomId ? roomName(resolvedRoomId, rooms) : null;
 
                 return (
@@ -1306,7 +1306,7 @@ function ChildCard({
     onChange({
       ...child,
       dateOfBirth: dob,
-      roomId: assignedRoomId || child.roomId,
+      roomId: assignedRoomId || "",
     });
   }
 
